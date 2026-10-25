@@ -12,12 +12,13 @@ import datetime as dt
 import hashlib
 import json
 import shutil
-import sys
+import time
 import urllib.request
 
 import numpy as np
 
 from . import config, steam
+from .progress import Status, fmt_bytes, fmt_time
 
 # Everything `Space` loads, except games.parquet, which `export` writes in its slim form.
 FILES = ["emb.npy", "emb_meta.json", "nn_sim.npy", "nn_idx.npy", "probe.npz", "cluster.npy", "centroids.npy",
@@ -67,17 +68,20 @@ def export(out=None) -> None:
 def _fetch(url: str, dest, size: int) -> None:
     req = urllib.request.Request(url, headers={"User-Agent": steam.USER_AGENT})
     part = dest.with_name(dest.name + ".part")
-    done, shown = 0, -1
-    with urllib.request.urlopen(req, timeout=120) as r, open(part, "wb") as f:
-        while block := r.read(1 << 20):
+    done, t0, moved = 0, time.time(), time.time()
+
+    def text() -> str:
+        quiet = time.time() - moved
+        speed = (f"no data for {fmt_time(quiet)}, still trying" if quiet >= 20
+                 else f"{done / max(time.time() - t0, 0.1) / 1e6:.1f} MB/s")
+        return f"{dest.name}: {fmt_bytes(done)} of {fmt_bytes(size)} ({done * 100 // max(size, 1)}%, {speed})"
+
+    with Status(text), urllib.request.urlopen(req, timeout=120) as r, open(part, "wb") as f:
+        while block := r.read(1 << 16):
             f.write(block)
             done += len(block)
-            pct = done * 100 // max(size, 1) // 5 * 5
-            if pct != shown:
-                sys.stdout.write(f"\r  {dest.name}: {pct}% of {size / 1e6:.0f} MB")
-                sys.stdout.flush()
-                shown = pct
-    print()
+            moved = time.time()
+    print(f"  {dest.name}: {fmt_bytes(size)} in {fmt_time(time.time() - t0)}")
     part.replace(dest)
 
 
@@ -101,11 +105,16 @@ def download(url: str | None = None, force: bool = False) -> None:
         dest = config.SPACE / name
         if dest.parent != config.SPACE:
             raise SystemExit(f"bad file name in manifest: {name!r}")
-        if not force and dest.exists() and dest.stat().st_size == info["size"] and _sha256(dest) == info["sha256"]:
-            print(f"  {name}: up to date")
-            continue
+        if not force and dest.exists() and dest.stat().st_size == info["size"]:
+            with Status(f"checking {name}, already on disk"):
+                intact = _sha256(dest) == info["sha256"]
+            if intact:
+                print(f"  {name}: up to date")
+                continue
         _fetch(base + name, dest, info["size"])
-        if _sha256(dest) != info["sha256"]:
+        with Status(f"checking {name}"):
+            intact = _sha256(dest) == info["sha256"]
+        if not intact:
             dest.unlink()
             raise SystemExit(f"{name} did not download correctly (checksum mismatch); run `download` again")
     (config.SPACE / "snapshot.json").write_text(json.dumps(manifest, indent=1), encoding="utf-8")

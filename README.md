@@ -27,6 +27,8 @@ The installer:
 3. downloads the prebuilt map of every Steam game (about 440 MB);
 4. asks how ideas should be written, and saves your key (if you give one) to `.env` in the project folder.
 
+A status line under each step shows what the installer is doing, how long that has taken, and how much has been downloaded or unpacked so far. The spinner and clock keep moving as long as the installer is working, including during the few minutes PyTorch takes to unpack. If a download gets no data for 20 seconds, the line says so.
+
 It is safe to run again at any time: finished steps are skipped, and it is how you change or add your key later.
 
 ## Run

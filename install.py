@@ -11,19 +11,28 @@ Sets up everything needed to run the map, and can be run again at any time
 Keys are saved in .env next to this file, which git ignores.
 """
 import argparse
+import collections
 import getpass
 import os
+import re
 import shutil
 import subprocess
 import sys
+import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
+from ideaplotter.progress import Status, dir_size, fmt_bytes, fmt_time  # noqa: E402  (standard library only)
+
 VENV = ROOT / ".venv"
 VENV_PY = VENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 ENV_FILE = ROOT / ".env"
+SITE_PACKAGES = VENV / "Lib/site-packages" if os.name == "nt" else None  # posix: found once the venv exists
+PIP_TMP = VENV / "pip-tmp"  # pip's downloads land here, so their size can be shown as they arrive
 TORCH_INDEX = "https://download.pytorch.org/whl/"
 WRITER_KEYS = ("OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "IDEAPLOTTER_BACKEND")
 
@@ -50,7 +59,10 @@ def make_venv() -> None:
     if VENV_PY.exists():
         print("  already set up")
         return
-    if run(sys.executable, "-m", "venv", VENV) != 0 or not VENV_PY.exists():
+    with Status("creating .venv and installing pip into it (usually under a minute)"):
+        made = subprocess.run([sys.executable, "-m", "venv", str(VENV)], cwd=ROOT, capture_output=True, text=True)
+    if made.returncode != 0 or not VENV_PY.exists():
+        print((made.stdout + made.stderr).strip())
         hint = (f"\n  On Ubuntu/Debian, install venv support first:  sudo apt install python{sys.version_info.major}."
                 f"{sys.version_info.minor}-venv" if sys.platform.startswith("linux") else "")
         sys.exit(f"  Could not create the Python environment in {VENV}.{hint}")
@@ -69,8 +81,87 @@ def gpu() -> tuple[str, float] | None:
         return ("NVIDIA GPU", 7.0)  # an older driver without compute_cap: the common case
 
 
+def site_packages() -> Path:
+    if SITE_PACKAGES:
+        return SITE_PACKAGES
+    return next(iter(sorted((VENV / "lib").glob("python*/site-packages"))), VENV / "lib")
+
+
+SIZE = {"kB": 1e3, "MB": 1e6, "GB": 1e9}
+
+
+def pip_install(*args) -> int:
+    """pip install, with its output turned into a live status line (and shown in full if it fails)."""
+    shutil.rmtree(PIP_TMP, ignore_errors=True)
+    PIP_TMP.mkdir(parents=True)
+    env = {**os.environ, "PYTHONUNBUFFERED": "1", "TMP": str(PIP_TMP), "TEMP": str(PIP_TMP), "TMPDIR": str(PIP_TMP)}
+    proc = subprocess.Popen([str(VENV_PY), "-m", "pip", "install", "--disable-pip-version-check", "--progress-bar",
+                             "off", *args], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, encoding="utf-8", errors="replace")
+    log = collections.deque(maxlen=80)
+    now = {"what": "checking what is needed", "dir": None, "base": 0, "total": 0, "t0": time.time()}
+
+    def measured() -> int:  # site-packages holds thousands of files: rescanned every 2 s, downloads twice a second
+        if time.time() - now["scanned"] >= (0.5 if now["total"] else 2):
+            got = max(0, dir_size(now["dir"]) - now["base"])
+            if got != now["got"]:
+                now["moved"] = time.time()
+            now["got"], now["scanned"] = got, time.time()
+        return now["got"]
+
+    def text() -> str:
+        if not now["dir"]:
+            return now["what"]
+        got = measured()
+        if now["total"]:  # a download of known size
+            got = min(got, now["total"])
+            quiet = time.time() - now["moved"]
+            speed = (f"no data for {fmt_time(quiet)}, still trying" if quiet >= 20
+                     else f"{got / max(time.time() - now['t0'], 0.1) / 1e6:.1f} MB/s")
+            return f"{now['what']}: {fmt_bytes(got)} of {fmt_bytes(now['total'])} ({got * 100 // now['total']}%, {speed})"
+        return f"{now['what']}: {fmt_bytes(got)} written"
+
+    def begin(what, folder=None, total=0):
+        if now["total"] >= 20e6:  # say when each big download finished
+            status.print(f"  downloaded {now['name']} ({fmt_bytes(now['total'])}) in "
+                         f"{fmt_time(time.time() - now['t0'])}")
+        now.update(what=what, dir=folder, base=dir_size(folder) if folder else 0, total=total, t0=time.time(),
+                   got=0, scanned=time.time(), moved=time.time())
+
+    with Status(text) as status:
+        for line in proc.stdout:
+            line = line.rstrip()
+            log.append(line)
+            if m := re.match(r"\s*Collecting (\S+)", line):
+                begin(f"looking up {m[1]}")
+            elif m := re.match(r"\s*Downloading (\S+)(?: \(([\d.]+) (kB|MB|GB)\))?", line):
+                name = "-".join(urllib.parse.unquote(m[1].rsplit("/", 1)[-1]).split("-")[:2])
+                total = int(float(m[2]) * SIZE[m[3]]) if m[2] else 0
+                begin(f"downloading {name}", PIP_TMP, total)
+                now["name"] = name
+            elif m := re.match(r"\s*Using cached (\S+)", line):
+                begin(f"using the copy of {m[1].split('-')[0]} downloaded earlier")
+            elif m := re.match(r"\s*Building wheel for (\S+)", line):
+                begin(f"building {m[1]}")
+            elif m := re.match(r"Installing collected packages: (.*)", line):
+                n = len(m[1].split(","))
+                begin(f"unpacking {n} package{'s' * (n > 1)} into .venv", site_packages())
+                now["installing"] = time.time()
+            elif m := re.match(r"Successfully installed (.*)", line):
+                begin("finishing")
+                n = len(m[1].split())
+                status.print(f"  installed {n} package{'s' * (n > 1)}"
+                             + (f" in {fmt_time(time.time() - now['installing'])}" if "installing" in now else ""))
+    code = proc.wait()
+    shutil.rmtree(PIP_TMP, ignore_errors=True)
+    if code != 0:
+        print("\n".join(log))
+    return code
+
+
 def install_packages() -> None:
-    have_torch = run(VENV_PY, "-c", "import torch", stderr=subprocess.DEVNULL) == 0
+    with Status("checking for PyTorch"):
+        have_torch = run(VENV_PY, "-c", "import torch", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
     if have_torch:
         print("  PyTorch already installed")
     else:
@@ -86,10 +177,10 @@ def install_packages() -> None:
         else:
             print("  No NVIDIA GPU found: installing PyTorch for the CPU (searches for empty spots take a few minutes)")
             index = ["--index-url", TORCH_INDEX + "cpu"]
-        if run(VENV_PY, "-m", "pip", "install", "--disable-pip-version-check", "torch", *index) != 0:
+        if pip_install("torch", *index) != 0:
             sys.exit("  Installing PyTorch failed (see the messages above). Run the installer again to retry.")
     print("  other packages")
-    if run(VENV_PY, "-m", "pip", "install", "--disable-pip-version-check", "-q", "-r", "requirements.txt") != 0:
+    if pip_install("-r", "requirements.txt") != 0:
         sys.exit("  Installing packages failed (see the messages above). Run the installer again to retry.")
 
 

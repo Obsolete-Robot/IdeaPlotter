@@ -32,6 +32,7 @@ import numpy as np
 
 from . import config, corpus, decode, holes, llm, report, steam, voids
 from .embed import Embedder
+from .progress import Status, dir_size, fmt_bytes
 from .space import Space
 
 
@@ -74,22 +75,50 @@ class Quota:
             self.path.write_text(json.dumps(self.state), encoding="utf-8")
 
 
+def load_embedder(model_name: str) -> Embedder:
+    """The embedding model, with a live line while it downloads (first start only) and loads."""
+    from huggingface_hub import constants, try_to_load_from_cache
+    from huggingface_hub.utils import disable_progress_bars, enable_progress_bars
+
+    def cached(name: str) -> bool:
+        return isinstance(try_to_load_from_cache(model_name, name), str)
+
+    loading = f"loading the embedding model {model_name}"
+    if cached("model.safetensors"):
+        with Status(loading):
+            return Embedder(model_name)
+    home, base = constants.HF_HOME, dir_size(constants.HF_HOME)
+
+    def text() -> str:
+        if cached("model.safetensors"):
+            return loading
+        return f"downloading the embedding model (first start): {fmt_bytes(max(0, dir_size(home) - base))} of ~1.2 GB"
+
+    disable_progress_bars()  # one line of our own instead of a bar per file
+    try:
+        with Status(text):
+            return Embedder(model_name)
+    finally:
+        enable_progress_bars()
+
+
 class App:
     def __init__(self, backend: str, model: str, effort: str, quota: Quota | None = None):
         self.quota = quota or Quota(None, None)
-        print("loading game space...")
-        self.space = Space()
+        with Status("loading the game map"):
+            self.space = Space()
         if self.space.xy is None or self.space.xyz is None:
             raise SystemExit("map layout missing; run `python -m ideaplotter download` for the prebuilt map")
-        print(f"  {len(self.space):,} games; loading embedder {self.space.model_name}")
-        self.embedder = Embedder(self.space.model_name)
+        print(f"  {len(self.space):,} games")
+        self.embedder = load_embedder(self.space.model_name)
         self.llm_args = (backend, model, effort)
         self._llm = None
         self._llm_lock = threading.Lock()
         self.jobs: dict[str, dict] = {}
         self._add_lock = threading.Lock()
         self.holes = None
-        self._refresh_map()
+        with Status("finding the empty spots and preparing the map for the browser"):
+            self._refresh_map()
         self.explored = [np.asarray(r["vec"], dtype=np.float32) for r in report.load_results(self.space)]
 
     def _refresh_map(self):
