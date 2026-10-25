@@ -18,6 +18,7 @@ POST /api/explore      {mode, rounds, ...}   -> {job}: find a void and write a g
 GET  /api/job/<id>     progress events and, when done, the idea
 """
 import datetime as dt
+import gzip
 import hashlib
 import json
 import secrets
@@ -29,6 +30,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
+import torch
 
 from . import config, corpus, decode, holes, llm, report, steam, voids
 from .embed import Embedder
@@ -125,6 +127,10 @@ class App:
         payload = report.map_payload(self.space, self.holes)
         self.holes = (payload["holes"], payload["holes2"])  # found once; a few added games do not move them
         self.map_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
+        # The page loads the map from a versioned URL, so a CDN in front (Cloudflare caches .js by default)
+        # can keep it for good: adding a game changes the version, and the page always asks for the current one.
+        self.map_url = f"api/map.{hashlib.sha1(self.map_json).hexdigest()[:12]}.js"
+        self.map_gz = gzip.compress(self.map_json, 6)
         self._appid_row = {int(a): i for i, a in enumerate(self.space.games["appid"])}
 
     def get_llm(self):
@@ -289,6 +295,9 @@ class App:
         except Exception as e:  # report every failure to the page instead of dying silently
             traceback.print_exc()
             job["status"], job["error"] = "error", str(e) or e.__class__.__name__
+        finally:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()  # hand back the void search's scratch memory, so the GPU stays near its idle use
 
 
 MAX_BODY = 8 << 20  # a lasso around the whole map sends ~1.5 MB of rows
@@ -320,13 +329,22 @@ def make_handler(app: App, base_path: str = ""):
             # behind Cloudflare every request comes from the tunnel; the visitor's address is in this header
             return self.headers.get("CF-Connecting-IP") or self.client_address[0]
 
-        def _send(self, code: int, body: bytes, ctype: str = "application/json"):
+        def _send(self, code: int, body: bytes, ctype: str = "application/json", cache: str = "no-store",
+                  encoding: str | None = None):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
+            self.send_header("Cache-Control", cache)
+            if encoding:
+                self.send_header("Content-Encoding", encoding)
+                self.send_header("Vary", "Accept-Encoding")
             self.end_headers()
             self.wfile.write(body)
+
+        def _send_map(self):
+            if "gzip" in self.headers.get("Accept-Encoding", ""):
+                return self._send(200, app.map_gz, cache="public, max-age=31536000, immutable", encoding="gzip")
+            return self._send(200, app.map_json, cache="public, max-age=31536000, immutable")
 
         def _json(self, obj, code: int = 200):
             self._send(code, json.dumps(obj, ensure_ascii=False).encode())
@@ -359,8 +377,13 @@ def make_handler(app: App, base_path: str = ""):
                     return self._json({"error": "Type at least two letters."}, 400)
                 return self._steam(app.search, term)
             if self.path in ("/", "/index.html"):
-                page = report.full_document(report.render_page(None)).encode()  # re-read so template edits show on reload
-                return self._send(200, page, "text/html; charset=utf-8")
+                page = report.full_document(report.render_page(None))  # re-read so template edits show on reload
+                page = page.replace('id="ip-data"', f'id="ip-data" data-map="{app.map_url}"', 1)
+                return self._send(200, page.encode(), "text/html; charset=utf-8")
+            if self.path == "/" + app.map_url:
+                return self._send_map()
+            if self.path.startswith("/api/map."):  # an old version (the map changed since that page loaded)
+                return self._json({"error": "The map was updated. Reload the page."}, 404)
             if self.path == "/api/map":
                 return self._send(200, app.map_json)
             if self.path == "/api/ideas":

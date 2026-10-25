@@ -1091,7 +1091,7 @@ async function boot() {
   if (!data) {
     S.live = true;
     try {
-      data = await (await fetch("api/map")).json();
+      data = await (await fetch($("ip-data").dataset.map || "api/map")).json();  // versioned, so it can be cached
       data.ideas = await (await fetch("api/ideas")).json();
     } catch (e) { throw new Error(friendly(e)); }
   }
