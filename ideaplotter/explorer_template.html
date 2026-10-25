@@ -1,0 +1,1123 @@
+<title>IdeaPlotter Atlas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a survey chart. The cloud fills the plate; a side ledger holds the selection, the void search and the ideas. */
+:root {
+  /* deep space: the map is always drawn on black, so the whole page stays dark */
+  --bg: #04050a;
+  --plate: #000;
+  --panel: #0a0c14;
+  --ink: #e4e8f2;
+  --muted: #8a93a8;
+  --rule: #1c2130;
+  --accent: #ffb547;      /* signal orange */
+  --accent-soft: #ffb54724;
+  --select: #6fd8f0;      /* lasso */
+  --good: #6fc48f;
+  --warn: #e0b453;
+  --bad: #ff6f86;
+  --font-display: "Big Shoulders Display", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--font-body); margin: 0; overflow: hidden; }
+* { box-sizing: border-box; }
+button, select, input { font: inherit; color: inherit; }
+a { color: inherit; text-decoration-color: var(--rule); text-underline-offset: 2px; }
+a:hover { text-decoration-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app { height: 100%; display: grid; grid-template-rows: auto 1fr; }
+header.bar {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  border-bottom: 1px solid var(--rule); background: var(--bg);
+}
+.brand { font: 800 22px/1 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; }
+.brand span { color: var(--accent); }
+.stat { font: 12px/1.3 var(--font-data); color: var(--muted); font-variant-numeric: tabular-nums; }
+.mode { font: 500 11px/1 var(--font-data); letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 8px; border: 1px solid var(--rule); border-radius: 3px; color: var(--muted); }
+.mode.live { color: var(--good); border-color: currentColor; }
+.dims { display: inline-flex; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+.dims button { padding: 5px 12px; border: 0; background: none; color: var(--muted); cursor: pointer; font: 600 12px/1 var(--font-data); letter-spacing: 0.08em; }
+.dims button + button { border-left: 1px solid var(--rule); }
+.dims button[aria-pressed="true"] { background: var(--accent); color: #000; }
+.search { margin-left: auto; position: relative; min-width: 0; flex: 0 1 280px; }
+.search input { width: 100%; padding: 6px 10px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); }
+.search ul { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; margin: 0; padding: 4px 0; list-style: none; background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; max-height: 320px; overflow: auto; }
+.search li button { width: 100%; text-align: left; padding: 6px 10px; border: 0; background: none; cursor: pointer; }
+.search li button:hover, .search li button:focus-visible { background: var(--accent-soft); }
+.search li button .muted { float: right; margin-left: 8px; font-size: 12px; }
+.search li.note { padding: 6px 10px; color: var(--muted); font-size: 13px; }
+.search li.steam { border-top: 1px solid var(--rule); }
+.store-about { white-space: pre-line; max-height: 220px; overflow: auto; }
+.about-btn { padding: 5px 10px; border: 1px solid var(--rule); border-radius: 4px; background: none; color: var(--muted); cursor: pointer; font: 600 12px/1 var(--font-data); letter-spacing: 0.06em; }
+.about-btn:hover { color: var(--ink); border-color: var(--accent); }
+dialog.intro { width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--rule); border-radius: 8px; background: var(--panel); color: var(--ink); }
+dialog.intro::backdrop { background: rgb(0 0 0 / 0.72); }
+.intro-body { padding: 20px 22px; display: grid; gap: 14px; }
+.intro-body h2 { margin: 0; font: 800 26px/1.1 var(--font-display); letter-spacing: 0.04em; text-transform: uppercase; }
+.intro-body h2 span { color: var(--accent); }
+.intro-body p { margin: 0; }
+.intro-video { aspect-ratio: 16 / 9; background: #000; border-radius: 4px; overflow: hidden; }
+.intro-video iframe { width: 100%; height: 100%; border: 0; display: block; }
+.intro-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0; }
+.plate { position: relative; min-width: 0; min-height: 0; background: var(--plate); overflow: hidden; touch-action: none; }
+.plate canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.plate::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, #000a 100%); }
+.plate.lasso { cursor: crosshair; }
+.plate.pan { cursor: grab; }
+.plate .tools, .plate .legend, .plate .tooltip, .plate canvas#over { z-index: 2; }
+.plate.pan.dragging { cursor: grabbing; }
+
+.tools { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; flex-wrap: wrap; z-index: 5; }
+.tool { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid #ffffff1f; border-radius: 4px; background: #05070dcc; backdrop-filter: blur(6px); cursor: pointer; font-size: 13px; }
+.tool[aria-pressed="true"] { border-color: var(--select); color: var(--select); box-shadow: inset 0 0 0 1px var(--select); }
+.tool[hidden] { display: none; }
+.tool kbd { font: 11px var(--font-data); color: var(--muted); }
+.legend { position: absolute; left: 12px; bottom: 12px; max-width: min(460px, calc(100% - 24px)); font: 11.5px/1.45 var(--font-data); color: var(--muted); background: #000a; padding: 6px 8px; border-radius: 4px; z-index: 5; }
+.title { position: absolute; top: 58px; left: 16px; z-index: 3; pointer-events: none; display: flex; align-items: center; gap: 12px; font: 500 12px/1 var(--font-data); letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink); }
+.title i { font-style: normal; color: var(--accent); letter-spacing: 0.05em; }
+.title::before { content: ""; order: 1; width: 36px; height: 1px; background: var(--accent); }
+.title span { order: 2; }
+.tooltip { position: absolute; pointer-events: none; z-index: 6; background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 6px 8px; font-size: 12.5px; max-width: 280px; box-shadow: 0 4px 16px #0003; }
+.tooltip b { display: block; font-weight: 600; }
+.tooltip span { color: var(--muted); font: 11px var(--font-data); }
+
+aside.ledger { border-left: 1px solid var(--rule); background: var(--panel); min-height: 0; overflow-y: auto; }
+.section { padding-block: 16px; padding-left: 18px; padding-right: max(18px, env(safe-area-inset-right, 0px)); border-bottom: 1px solid var(--rule); display: grid; gap: 10px; }
+.eyebrow { font: 500 11px/1 var(--font-data); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+h2 { font: 800 26px/1.05 var(--font-display); letter-spacing: 0.02em; margin: 0; text-wrap: balance; }
+h3 { font: 600 13px/1.3 var(--font-body); margin: 0; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font-size: 12px; padding: 2px 7px; border-radius: 3px; border: 1px solid var(--rule); white-space: nowrap; }
+.chip i { font-style: normal; color: var(--muted); font: 11px var(--font-data); margin-left: 4px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.btn { padding: 8px 14px; border-radius: 4px; border: 1px solid var(--accent); background: var(--accent); color: var(--panel); font-weight: 600; cursor: pointer; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.ghost { background: none; color: var(--ink); border-color: var(--rule); font-weight: 500; }
+label.field { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+label.field select { padding: 5px 6px; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel); color: var(--ink); }
+.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.metric { display: grid; gap: 2px; }
+.metric b { font: 500 18px/1.1 var(--font-data); font-variant-numeric: tabular-nums; }
+.metric span { font-size: 11.5px; color: var(--muted); line-height: 1.3; }
+.pill { font: 500 11px/1 var(--font-data); padding: 3px 7px; border-radius: 99px; border: 1px solid currentColor; }
+.pill.good { color: var(--good); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); }
+.recipe { display: grid; gap: 6px; }
+.recipe .r { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; align-items: baseline; font-size: 13px; }
+.recipe .r b { font: 500 12px var(--font-data); text-align: right; color: var(--accent); font-variant-numeric: tabular-nums; }
+.nbrs { display: grid; gap: 4px; font-size: 13px; }
+.nbrs .n { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.nbrs .n b { font: 500 12px var(--font-data); text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.timeline { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.timeline li { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 8px; font-size: 13px; }
+.timeline li::before { content: ""; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; border: 1.5px solid var(--muted); }
+.timeline li.done::before { background: var(--accent); border-color: var(--accent); }
+.timeline li.active::before { border-color: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 4px var(--accent-soft); } }
+@media (prefers-reduced-motion: reduce) { .timeline li.active::before { animation: none; } }
+.idea-text { display: grid; gap: 8px; }
+.idea-text .short { font-size: 15px; line-height: 1.45; }
+.idea-text .about { white-space: pre-line; color: var(--ink); }
+.kv { display: grid; gap: 2px; }
+.kv h3 { font: 500 11px/1 var(--font-data); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.list { display: grid; }
+.item { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 18px; border: 0; border-bottom: 1px solid var(--rule); background: none; text-align: left; cursor: pointer; }
+.item:hover, .item[aria-current="true"] { background: var(--accent-soft); }
+.item .rk { font: 500 13px var(--font-data); color: var(--muted); text-align: right; }
+.item .t { font-weight: 600; font-size: 13.5px; line-height: 1.25; }
+.item .s { font-size: 12px; color: var(--muted); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.item .nv { font: 500 13px var(--font-data); font-variant-numeric: tabular-nums; color: var(--accent); }
+.empty { padding: 16px 18px; color: var(--muted); font-size: 13px; }
+.err { color: var(--bad); font-size: 13px; }
+svg.hist text { font: 10px var(--font-data); fill: var(--muted); }
+.back { border: 0; background: none; padding: 0; color: var(--muted); cursor: pointer; font-size: 12.5px; justify-self: start; }
+.link { border: 0; background: none; padding: 0; color: inherit; cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 2px; }
+.link:hover { text-decoration-color: var(--accent); }
+.header-img { width: 100%; aspect-ratio: 460 / 215; object-fit: cover; border-radius: 4px; background: var(--rule); max-width: 100%; }
+.tray { background: var(--accent-soft); }
+.chip button { border: 0; background: none; padding: 0 0 0 4px; cursor: pointer; color: var(--muted); }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 420px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.nbrs .n.far b { color: var(--bad); }
+.actions { display: grid; gap: 8px; }
+
+@media (max-width: 820px) {
+  body { overflow: auto; }
+  .app { height: auto; min-height: 100%; }
+  .main { grid-template-columns: minmax(0, 1fr); }
+  .plate { height: 58vh; min-height: 340px; }
+  aside.ledger { border-left: 0; border-top: 1px solid var(--rule); overflow: visible; }
+  .search { flex-basis: 100%; margin-left: 0; }
+  .legend, .title { display: none; }
+  .section { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .item { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+}
+</style>
+
+<div class="app">
+  <header class="bar">
+    <div class="brand">Idea<span>Plotter</span></div>
+    <div class="stat" id="stat">loading the cloud…</div>
+    <div class="mode" id="mode">static</div>
+    <div class="dims" id="dims" role="group" aria-label="Map view">
+      <button id="v2" aria-pressed="false" title="Flat 2-D map (press 2)">2D</button><button id="v3" aria-pressed="true" title="3-D cloud (press 3)">3D</button>
+    </div>
+    <button class="about-btn" id="about-btn" aria-haspopup="dialog">What is this?</button>
+    <div class="search">
+      <input id="q" type="search" placeholder="Find a game on the map" autocomplete="off" aria-label="Find a game on the map">
+      <ul id="qres" hidden></ul>
+    </div>
+  </header>
+  <div class="main">
+    <div class="plate pan" id="plate">
+      <canvas id="stars" aria-hidden="true"></canvas>
+      <canvas id="dots" aria-hidden="true"></canvas>
+      <canvas id="over" role="img" aria-label="3-D map of Steam games. Each point of light is a game; nearby points have similar store pages."></canvas>
+      <div class="title" aria-hidden="true"><i id="dim-tag">3D</i><span>Map of meaning</span></div>
+      <div class="tools">
+        <button class="tool" id="t-pan" aria-pressed="true" title="Drag to orbit, right-drag (or Ctrl-drag) to pan, scroll to zoom">Orbit <kbd>O</kbd></button>
+        <button class="tool" id="t-lasso" aria-pressed="false" title="Draw around an area to explore it">Lasso area <kbd>L</kbd></button>
+        <button class="tool" id="t-zin" aria-label="Zoom in">+</button>
+        <button class="tool" id="t-zout" aria-label="Zoom out">−</button>
+        <button class="tool" id="t-reset">Reset view</button>
+        <button class="tool" id="t-drift" aria-pressed="true" title="Slowly turn the cloud while nothing is selected">Drift</button>
+        <button class="tool" id="t-labels" aria-pressed="true">Region labels</button>
+        <button class="tool" id="t-holes" aria-pressed="true" title="Show empty patches of the map that are surrounded by games">Holes</button>
+      </div>
+      <div class="legend" id="legend">Each point of light is a Steam game, brighter with more reviews; similar store pages sit together. Drag to orbit, right-drag to pan, scroll to zoom. The cloud is a 3-D projection of a high-dimensional space, so isolation is measured in the full space, not by distance here.</div>
+      <div class="tooltip" id="tip" hidden></div>
+    </div>
+    <aside class="ledger" id="ledger" aria-live="polite"></aside>
+  </div>
+</div>
+
+<dialog class="intro" id="intro" aria-labelledby="intro-title">
+  <div class="intro-body">
+    <h2 id="intro-title">A map of <span>every game on Steam</span></h2>
+    <p>Each point of light is a Steam game, placed by what its store page says, so similar games sit together. The dark gaps are games nobody has made yet. IdeaPlotter finds those gaps and writes the game that would fit there. The video shows how it works.</p>
+    <div class="intro-video" id="intro-video"></div>
+    <div class="intro-actions">
+      <a href="https://youtu.be/ObvISKp1dWo" target="_blank" rel="noopener">Watch on YouTube</a>
+      <button class="btn" id="intro-close" autofocus>Explore the map</button>
+    </div>
+  </div>
+</dialog>
+
+<script id="ip-data" type="application/json">/*__DATA__*/</script>
+<script>
+(() => {
+"use strict";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const f3 = (x) => (x == null ? "–" : Number(x).toFixed(3));
+const pct = (x) => (x >= 0.995 ? (x * 100).toFixed(2) : (x * 100).toFixed(1)) + "%";
+const store = (appid) => `https://store.steampowered.com/app/${appid}`;
+function b64(s, T) { const bin = atob(s); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return new T(u8.buffer); }
+
+const S = {
+  live: false, data: null, n: 0, X: null, Y: null, C: null, R: null, appid: null, names: null, lower: null,
+  P: null,       // world positions, x y z per game
+  tool: "pan", labels: true,
+  sel: null,      // { rows, mask: Uint8Array, count, summary } games inside the lasso
+  ideas: [], focus: null, job: null, hover: -1, hoverIdea: null, pinned: -1, rows: [],
+  game: null,     // { row, card } the game whose panel is open (card comes from the server)
+  spot: null,     // { xyz, r, hole, regions } an empty place picked on the map
+  blend: [],      // rows of games picked to combine
+  showHoles: true,
+  settings: { anchors: "2-4", rounds: 2, dim: 3 },
+  dim: 3,         // which layout is drawn: 3 (cloud) or 2 (flat map)
+};
+try { const saved = JSON.parse(localStorage.getItem("ip-settings") || "null"); if (saved) Object.assign(S.settings, saved); } catch (e) { /* storage unavailable */ }
+S.dim = S.settings.dim === 2 ? 2 : 3;
+const saveSettings = () => { try { localStorage.setItem("ip-settings", JSON.stringify(S.settings)); } catch (e) { /* ignore */ } };
+
+/* ---------- colours ---------- */
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function hexToRgb(h) { h = h.replace("#", ""); if (h.length === 3) h = h.split("").map((c) => c + c).join(""); const n = parseInt(h.slice(0, 6), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function hsl(h, s, l) { const k = (n) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l); const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1))); return [f(0) * 255, f(8) * 255, f(4) * 255]; }
+let PAL = null;
+function palette() {
+  // neon nebula: hue follows where a region sits in the cloud, so neighbours share a colour field,
+  // with a little jitter so adjacent regions still read apart
+  const cl = S.data ? S.data.clusters : [], cols = [];
+  cl.forEach((c, i) => {
+    const w = c.xyz.map((v, k) => (v - LAY[3].c[k]) / LAY[3].k), ang = (Math.atan2(w[2], w[0]) * 180) / Math.PI, jit = ((i * 137.508) % 60) - 30;
+    const h = (ang * 1.5 + w[1] * 140 + jit + 720) % 360;
+    cols.push(hsl(h, 0.88, 0.62 + ((i * 0.618) % 1) * 0.1));
+  });
+  PAL = { cols, css: cols.map((c) => `rgb(${c.map(Math.round).join(",")})`), accent: cssVar("--accent"), select: cssVar("--select"), bad: cssVar("--bad"), ink: cssVar("--ink"), muted: cssVar("--muted"), panel: cssVar("--panel"), rule: cssVar("--rule") };
+}
+
+/* ---------- layouts and camera ---------- */
+// The page holds both map layouts. S.dim picks the one drawn, and which coordinates (xyz or xy) markers use.
+// World space is the quantised map (0..65535 per axis) re-centred on the cloud and scaled to span about -1..1;
+// the 2-D layout lies flat at z = 0 and is seen straight on.
+const LAY = { 2: { c: [32768, 32768], k: 32768, P: null }, 3: { c: [32768, 32768, 32768], k: 32768, P: null } };
+let WS = LAY[3];
+const qOf = (o) => o && (S.dim === 3 ? o.xyz : o.xy);
+const toW = (q) => [(q[0] - WS.c[0]) / WS.k, (q[1] - WS.c[1]) / WS.k, q.length === 3 ? (q[2] - WS.c[2]) / WS.k : 0];
+const toQ = (w) => w.slice(0, S.dim).map((v, i) => Math.round((v * WS.k + WS.c[i]) * 10) / 10);
+const holesNow = () => (S.dim === 3 ? S.data.holes : S.data.holes2) || [];
+const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const FOV = (42 * Math.PI) / 180, NEAR = 0.01;
+const cam = { yaw: 0.5, pitch: 0.18, dist: 3, t: [0, 0, 0] };
+let camV = 1, fitDist = 3;
+function basis() {
+  const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch), cy = Math.cos(cam.yaw), syw = Math.sin(cam.yaw);
+  const fwd = [-cp * syw, -sp, -cp * cy], right = [cy, 0, -syw];
+  const up = [right[1] * fwd[2] - right[2] * fwd[1], right[2] * fwd[0] - right[0] * fwd[2], right[0] * fwd[1] - right[1] * fwd[0]];
+  const eye = [cam.t[0] - fwd[0] * cam.dist, cam.t[1] - fwd[1] * cam.dist, cam.t[2] - fwd[2] * cam.dist];
+  return { fwd, right, up, eye, F: H / 2 / Math.tan(FOV / 2) };
+}
+let B = null;
+const camChanged = () => { camV++; B = null; draw(); };
+const bas = () => B || (B = basis());
+function proj(w) {  // world point -> [screen x, screen y, depth] or null when behind the camera
+  const b = bas(), d = sub3(w, b.eye), z = dot3(d, b.fwd);
+  if (z < NEAR) return null;
+  return [W / 2 + (dot3(d, b.right) * b.F) / z, H / 2 - (dot3(d, b.up) * b.F) / z, z];
+}
+const projQ = (q) => (q && q.length === S.dim ? proj(toW(q)) : null);
+function unproj(x, y, z) { const b = bas(), u = (x - W / 2) / b.F, v = -(y - H / 2) / b.F; return [0, 1, 2].map((i) => b.eye[i] + (b.fwd[i] + b.right[i] * u + b.up[i] * v) * z); }
+function fit() {
+  const aspect = W / H, half = Math.min(FOV / 2, Math.atan(Math.tan(FOV / 2) * aspect));
+  fitDist = S.dim === 3 ? 1.0 / Math.sin(half) : 1.04 / Math.tan(half);
+  if (S.dim === 2) { cam.yaw = 0; cam.pitch = 0; }
+  cam.t = [0, 0, 0]; cam.dist = fitDist; camChanged();
+}
+function zoomAt(f, x, y) {
+  const nd = Math.max(fitDist * 0.02, Math.min(cam.dist / f, fitDist * 3)), b = bas(), s = cam.dist / b.F;
+  const p = [0, 1, 2].map((i) => cam.t[i] + (b.right[i] * (x - W / 2) - b.up[i] * (y - H / 2)) * s);  // cursor at the target's depth
+  const k = 1 - nd / cam.dist;
+  cam.t = cam.t.map((v, i) => v + (p[i] - v) * k); cam.dist = nd; camChanged();
+}
+let tween = null;
+function flyTo3(w, dist) {
+  const to = { t: w.slice(), dist: dist || cam.dist };
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) { cam.t = to.t; cam.dist = to.dist; return camChanged(); }
+  tween = { from: { t: cam.t.slice(), dist: cam.dist }, to, start: performance.now(), dur: 700 }; draw();
+}
+
+/* ---------- WebGL point cloud ---------- */
+const plate = $("plate"), stars = $("stars"), dots = $("dots"), over = $("over");
+const octx = over.getContext("2d");
+const glOpts = { antialias: false, premultipliedAlpha: true, alpha: true };
+const gl = dots.getContext("webgl2", glOpts) || dots.getContext("webgl", glOpts);
+let W = 0, H = 0, DPR = 1, raf = 0, GLS = null;
+const VS = `
+attribute vec3 aPos; attribute vec4 aCol; attribute float aSel;
+uniform vec3 uEye, uRight, uUp, uFwd, uSelCol; uniform vec2 uRes;
+uniform float uF, uDpr, uSize, uGain, uHaze, uHazeA, uSelOn, uFog;
+varying vec3 vCol; varying float vA;
+void main() {
+  vec3 d = aPos - uEye; float z = dot(d, uFwd), zz = max(z, 1e-4);
+  vec2 s = vec2(dot(d, uRight), dot(d, uUp)) * uF / zz;
+  gl_Position = vec4(s / (uRes * 0.5), z > ${NEAR.toFixed(3)} ? 0.0 : 2.0, 1.0);
+  float pop = aCol.a;
+  float px = uSize * (0.55 + 1.1 * pop) * uF / zz * uDpr;
+  float a = uGain * (0.3 + 0.7 * pop);
+  if (uHaze > 0.0) { px *= uHaze; a *= uHazeA; }
+  a *= exp(-max(z - uFog, 0.0) / uFog * 1.2);    // fade what lies beyond the focus, more so when zoomed in
+  a *= smoothstep(0.04, 0.35, z / uFog);          // and what drifts right up against the camera
+  bool on = aSel > 0.5;
+  if (uSelOn > 0.5) a *= on ? 1.2 : 0.12;
+  float lim = max(px, 1.6 * uDpr);
+  a *= pow(min(1.0, px / lim), 1.2);              // sub-pixel points fade instead of popping
+  gl_PointSize = min(lim, 128.0);
+  vCol = (uSelOn > 0.5 && on) ? mix(aCol.rgb, uSelCol, 0.6) : aCol.rgb; vA = a;
+}`;
+const FS = `
+precision mediump float; varying vec3 vCol; varying float vA;
+void main() { vec2 p = gl_PointCoord * 2.0 - 1.0; float r2 = dot(p, p); if (r2 > 1.0) discard; float a = vA * exp(-r2 * 3.2); gl_FragColor = vec4(vCol * a, a); }`;
+// tone map: light piles up in a float buffer, then rolls off softly so dense regions glow instead of clipping
+const TVS = `attribute vec2 aXY; varying vec2 vUV; void main() { vUV = aXY * 0.5 + 0.5; gl_Position = vec4(aXY, 0.0, 1.0); }`;
+const TFS = `
+precision mediump float; varying vec2 vUV; uniform sampler2D uTex; uniform float uExp;
+void main() {
+  vec3 c = texture2D(uTex, vUV).rgb * uExp;
+  vec3 m = 1.0 - exp(-c);
+  float l = dot(m, vec3(0.3, 0.55, 0.15));
+  m = mix(vec3(l), m, 0.92);                       // let the brightest cores wash toward white, like a long exposure
+  gl_FragColor = vec4(m, max(m.r, max(m.g, m.b)));
+}`;
+function initGL() {
+  if (!gl) throw new Error("this browser has WebGL turned off, which the 3-D map needs");
+  const gl2 = typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
+  const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const prog = (vs, fs) => { const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); return p; };
+  const p = prog(VS, FS), vao = gl2 ? gl.createVertexArray() : null;
+  if (vao) gl.bindVertexArray(vao);
+  const U = {}; for (const n of ["uEye", "uRight", "uUp", "uFwd", "uSelCol", "uRes", "uF", "uDpr", "uSize", "uGain", "uHaze", "uHazeA", "uSelOn", "uFog"]) U[n] = gl.getUniformLocation(p, n);
+  const buf = (data, name, size, type, norm) => { const b = gl.createBuffer(), loc = gl.getAttribLocation(p, name); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, type, norm, 0, 0); return b; };
+  const col = new Uint8Array(S.n * 4);
+  for (let i = 0; i < S.n; i++) { const c = PAL.cols[S.C[i]], j = (Math.abs(Math.sin(i * 12.9898) * 43758.5453) % 1) * 0.3; for (let k = 0; k < 3; k++) col[i * 4 + k] = Math.max(0, Math.min(255, c[k] * (0.85 + j))); col[i * 4 + 3] = S.R[i]; }
+  const pos = buf(S.P, "aPos", 3, gl.FLOAT, false); buf(col, "aCol", 4, gl.UNSIGNED_BYTE, true);
+  const sel = buf(new Uint8Array(S.n), "aSel", 1, gl.UNSIGNED_BYTE, false);
+  gl.disable(gl.DEPTH_TEST);
+  GLS = { U, sel, pos, selRef: null, p, vao, hdr: null };
+  // float render target (WebGL2 + EXT_color_buffer_float); without one the points draw straight to the screen
+  if (gl2 && gl.getExtension("EXT_color_buffer_float")) {
+    const tp = prog(TVS, TFS), qvao = gl.createVertexArray();
+    gl.bindVertexArray(qvao);
+    const quad = gl.createBuffer(), loc = gl.getAttribLocation(tp, "aXY");
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+    const tex = gl.createTexture(), fb = gl.createFramebuffer();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+    GLS.hdr = { tp, qvao, tex, fb, w: 0, h: 0, uTex: gl.getUniformLocation(tp, "uTex"), uExp: gl.getUniformLocation(tp, "uExp") };
+  }
+}
+function drawStars() {
+  const c = stars.getContext("2d"); stars.width = W * DPR; stars.height = H * DPR; c.setTransform(DPR, 0, 0, DPR, 0, 0);
+  c.fillStyle = "#000"; c.fillRect(0, 0, W, H);
+  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let i = 0, n = Math.round((W * H) / 900); i < n; i++) { const a = rnd() ** 3 * 0.55 + 0.04; c.fillStyle = `rgba(200,210,255,${a.toFixed(3)})`; const s = rnd() < 0.97 ? 0.8 : 1.4; c.fillRect(rnd() * W, rnd() * H, s, s); }
+}
+function resize() {
+  const r = plate.getBoundingClientRect(); W = Math.max(1, Math.round(r.width)); H = Math.max(1, Math.round(r.height));
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  dots.width = W * DPR; dots.height = H * DPR; over.width = W * DPR; over.height = H * DPR;
+  drawStars(); B = null; camV++; draw();
+}
+const LOOK = { size: 0.004, gain: 0.4, haze: 9, hazeA: 0.08, exposure: 2.6 };
+let drift = !matchMedia("(prefers-reduced-motion: reduce)").matches, lastT = 0;
+const busy = () => pointers.size > 0 || lasso.pts.length > 0 || S.game || S.focus || S.spot || S.sel || S.job;
+function draw() { if (!raf) raf = requestAnimationFrame(frame); }
+function frame(t) {
+  raf = 0; const dt = lastT ? Math.min(0.05, (t - lastT) / 1000) : 0; lastT = t;
+  if (tween) {
+    const k = Math.min(1, (t - tween.start) / tween.dur), e = k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2;
+    cam.t = tween.from.t.map((v, i) => v + (tween.to.t[i] - v) * e); cam.dist = tween.from.dist + (tween.to.dist - tween.from.dist) * e;
+    B = null; camV++; if (k >= 1) tween = null;
+  }
+  const spin = drift && S.dim === 3 && !busy();
+  if (spin) { cam.yaw += dt * 0.035; B = null; camV++; }
+  render();
+  if (tween || spin) draw(); else lastT = 0;
+}
+function render() {
+  if (!S.data || !GLS) return;
+  const b = bas(), U = GLS.U, hdr = GLS.hdr, w = dots.width, h = dots.height;
+  gl.useProgram(GLS.p); if (GLS.vao) gl.bindVertexArray(GLS.vao);
+  if (GLS.selRef !== S.sel) {  // upload the lasso mask when the selection changes
+    gl.bindBuffer(gl.ARRAY_BUFFER, GLS.sel); gl.bufferData(gl.ARRAY_BUFFER, S.sel ? S.sel.mask : new Uint8Array(S.n), gl.STATIC_DRAW); GLS.selRef = S.sel;
+  }
+  if (hdr) {
+    if (hdr.w !== w || hdr.h !== h) {
+      gl.bindTexture(gl.TEXTURE_2D, hdr.tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, hdr.fb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, hdr.tex, 0);
+      hdr.w = w; hdr.h = h;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, hdr.fb);
+  }
+  gl.viewport(0, 0, w, h); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+  gl.uniform3fv(U.uEye, b.eye); gl.uniform3fv(U.uRight, b.right); gl.uniform3fv(U.uUp, b.up); gl.uniform3fv(U.uFwd, b.fwd);
+  gl.uniform3fv(U.uSelCol, hexToRgb(PAL.select).map((v) => v / 255)); gl.uniform2f(U.uRes, W, H);
+  gl.uniform1f(U.uF, b.F); gl.uniform1f(U.uDpr, DPR); gl.uniform1f(U.uSelOn, S.sel ? 1 : 0); gl.uniform1f(U.uFog, cam.dist);
+  // closer in, fewer games share each pixel, so each one may glow brighter
+  const zoom = fitDist / cam.dist;
+  gl.uniform1f(U.uSize, LOOK.size * Math.min(1.6, zoom ** 0.25)); gl.uniform1f(U.uGain, LOOK.gain * Math.min(1.8, zoom ** 0.3));
+  gl.uniform1f(U.uHaze, LOOK.haze); gl.uniform1f(U.uHazeA, LOOK.hazeA / Math.max(1, zoom) ** 0.6); gl.drawArrays(gl.POINTS, 0, S.n);
+  gl.uniform1f(U.uHaze, 0.0); gl.drawArrays(gl.POINTS, 0, S.n);
+  if (hdr) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.disable(gl.BLEND);
+    gl.useProgram(hdr.tp); gl.bindVertexArray(hdr.qvao);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, hdr.tex); gl.uniform1i(hdr.uTex, 0); gl.uniform1f(hdr.uExp, LOOK.exposure);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  renderOverlay();
+}
+
+/* ---------- overlay: labels, markers, lines ---------- */
+function renderOverlay() {
+  const o = octx; o.setTransform(DPR, 0, 0, DPR, 0, 0); o.clearRect(0, 0, W, H);
+  if (!S.data) return;
+  if (S.labels) labels(o);
+  if (lasso.pts.length > 1) {  // adding draws solid, removing draws dashed red
+    o.beginPath(); lasso.pts.forEach(([x, y], i) => (i ? o.lineTo(x, y) : o.moveTo(x, y)));
+    const sub = lasso.op === "sub"; o.setLineDash(sub ? [5, 4] : []);
+    o.lineWidth = 1.5; o.strokeStyle = sub ? PAL.bad : PAL.select; o.stroke(); o.setLineDash([]);
+    if (lasso.op !== "set") { const [x, y] = lasso.pts[0]; o.font = '600 15px "IBM Plex Mono", monospace'; o.fillStyle = o.strokeStyle; o.textAlign = "center"; o.textBaseline = "middle"; o.fillText(sub ? "−" : "+", x - 12, y - 12); }
+  }
+  const at = (row) => proj([S.P[row * 3], S.P[row * 3 + 1], S.P[row * 3 + 2]]);
+  // focused idea: lines to its closest games and its recipe
+  const f = S.focus, fp = f && projQ(qOf(f));
+  if (fp) {
+    o.lineWidth = 1;
+    for (const n of f.neighbors || []) { const p = n.row != null && at(n.row); if (!p) continue; o.strokeStyle = PAL.muted; o.globalAlpha = 0.7; line(o, fp[0], fp[1], p[0], p[1]); ring(o, p[0], p[1], 3, PAL.muted); }
+    o.setLineDash([3, 3]);
+    for (const a of f.anchors || []) { const p = a.row != null && at(a.row); if (!p) continue; o.strokeStyle = PAL.accent; o.globalAlpha = 0.9; line(o, fp[0], fp[1], p[0], p[1]); ring(o, p[0], p[1], 4, PAL.accent); }
+    o.setLineDash([]); o.globalAlpha = 1;
+  }
+  // holes: empty pockets inside the cloud, with games on every side
+  if (S.showHoles) {
+    o.setLineDash([4, 3]); o.strokeStyle = PAL.select; o.fillStyle = PAL.select;
+    for (const h of holesNow()) {
+      const p = projQ(qOf(h)); if (!p) continue;
+      const r = Math.max(4, ((h.r / WS.k) * bas().F) / p[2]), hot = S.spot && S.spot.hole === h;
+      if (p[0] < -r || p[1] < -r || p[0] > W + r || p[1] > H + r) continue;
+      o.beginPath(); o.arc(p[0], p[1], r, 0, Math.PI * 2);
+      o.globalAlpha = hot ? 0.16 : 0.05; o.fill();
+      o.globalAlpha = (hot ? 1 : 0.7) * Math.min(1, fitDist / p[2]); o.lineWidth = hot ? 2 : 1.2; o.stroke();
+    }
+    o.setLineDash([]); o.globalAlpha = 1;
+  }
+  const sp = S.spot && projQ(S.spot.q);
+  if (sp) {
+    const [x, y] = sp; o.strokeStyle = PAL.select; o.lineWidth = 1.5;
+    o.beginPath(); o.moveTo(x - 9, y); o.lineTo(x + 9, y); o.moveTo(x, y - 9); o.lineTo(x, y + 9); o.stroke();
+    if (S.spot.r) { o.setLineDash([4, 3]); o.beginPath(); o.arc(x, y, Math.max(6, ((S.spot.r / WS.k) * bas().F) / sp[2]), 0, Math.PI * 2); o.stroke(); o.setLineDash([]); }
+  }
+  // open game: lines to its closest (grey) and furthest (red, dashed) games
+  const gp = S.game && S.game.card && at(S.game.row);
+  if (gp) {
+    o.lineWidth = 1; o.globalAlpha = 0.75;
+    for (const c of S.game.card.closest) { const p = at(c.row); if (!p) continue; o.strokeStyle = PAL.muted; line(o, gp[0], gp[1], p[0], p[1]); ring(o, p[0], p[1], 3, PAL.muted); }
+    o.setLineDash([3, 4]);
+    for (const c of S.game.card.furthest) { const p = at(c.row); if (!p) continue; o.strokeStyle = PAL.bad; line(o, gp[0], gp[1], p[0], p[1]); ring(o, p[0], p[1], 4, PAL.bad); }
+    o.setLineDash([]); o.globalAlpha = 1;
+  }
+  for (const r of S.blend) { const p = at(r); if (p) { ring(o, p[0], p[1], 8, PAL.accent); ring(o, p[0], p[1], 3, PAL.accent); } }
+  // pending void from a running job
+  const jp = S.job && S.job.void && S.job.status !== "done" && projQ(qOf(S.job.void));
+  if (jp) marker(o, jp[0], jp[1], "?", true);
+  // ideas: quiet sparks until you zoom in, hover or open one
+  const full = fitDist / cam.dist > 2.2;
+  S.ideas.forEach((idea, i) => { const p = projQ(qOf(idea)); if (!p) return; const hot = S.focus === idea || S.hoverIdea === idea; if (full || hot) marker(o, p[0], p[1], String(i + 1), hot); else spark(o, p[0], p[1]); });
+  for (const r of [S.hover, S.pinned]) if (r >= 0) { const p = at(r); if (p) ring(o, p[0], p[1], 6, PAL.ink); }
+}
+const ADULT = new Set(["Sexual Content", "Nudity", "NSFW", "Hentai", "Mature"]);  // still on the map, just not in the headlines
+function labels(o) {
+  // region callouts: a ring on the region's centre, a leader line out, and the name in the region's colour
+  const zoom = fitDist / cam.dist, budget = Math.min(26, Math.round(7 + 5 * zoom)), placed = [], used = new Set();
+  const order = S.data.clusters.map((c, i) => i).sort((a, b) => S.data.clusters[b].size - S.data.clusters[a].size);
+  const size = Math.round(Math.min(26, 16 + 2 * zoom));
+  o.font = `800 ${size}px "Big Shoulders Display", "Arial Narrow", sans-serif`; o.textBaseline = "middle";
+  for (const ci of order) {
+    if (placed.length >= budget) break;
+    const c = S.data.clusters[ci], p = projQ(qOf(c)); if (!p) continue;
+    const [x, y, z] = p; if (x < 40 || y < 40 || x > W - 40 || y > H - 40) continue;
+    const parts = c.name.split(" / ").filter((t) => !ADULT.has(t)); if (!parts.length) continue;
+    let text = parts[0]; if (used.has(text)) text = parts.slice(0, 2).join(" · "); if (used.has(text)) continue;
+    text = text.toUpperCase();
+    let dx = x - W / 2, dy = y - H / 2; const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+    const L = 46, ex = x + dx * L, ey = y + dy * L, side = dx >= 0 ? 1 : -1, hx = ex + side * 22;
+    const tw = o.measureText(text).width, tx = side > 0 ? hx + 6 : hx - 6 - tw;
+    const box = [Math.min(x, tx) - 4, Math.min(y, ey) - size / 2 - 2, Math.max(x, tx + tw) + 4, Math.max(y, ey) + size / 2 + 2];
+    if (box[0] < 4 || box[2] > W - 4 || box[1] < 50) continue;
+    if (placed.some((q) => !(box[2] < q[0] || box[0] > q[2] || box[3] < q[1] || box[1] > q[3]))) continue;
+    placed.push(box); used.add(parts[0]); used.add(parts.slice(0, 2).join(" · "));
+    const col = PAL.css[ci], a = Math.max(0.35, Math.min(1, (fitDist * 1.1) / z));
+    o.globalAlpha = a * 0.8; o.strokeStyle = col; o.lineWidth = 1;
+    o.beginPath(); o.moveTo(x, y); o.lineTo(ex, ey); o.lineTo(hx, ey); o.stroke();
+    o.beginPath(); o.arc(x, y, 3.5, 0, Math.PI * 2); o.stroke();
+    o.globalAlpha = a; o.shadowColor = "rgba(0,0,0,0.9)"; o.shadowBlur = 8; o.fillStyle = col; o.textAlign = "left";
+    o.fillText(text, tx, ey); o.shadowBlur = 0;
+  }
+  o.globalAlpha = 1;
+}
+function spark(o, x, y) {
+  if (x < -8 || y < -8 || x > W + 8 || y > H + 8) return;
+  o.fillStyle = PAL.accent; o.globalAlpha = 0.95; o.beginPath(); o.arc(x, y, 2.2, 0, Math.PI * 2); o.fill();
+  o.strokeStyle = PAL.accent; o.globalAlpha = 0.45; o.lineWidth = 1; o.beginPath(); o.moveTo(x - 6, y); o.lineTo(x + 6, y); o.moveTo(x, y - 6); o.lineTo(x, y + 6); o.stroke(); o.globalAlpha = 1;
+}
+function line(o, x1, y1, x2, y2) { o.beginPath(); o.moveTo(x1, y1); o.lineTo(x2, y2); o.stroke(); }
+function ring(o, x, y, r, col) { o.beginPath(); o.arc(x, y, r, 0, Math.PI * 2); o.lineWidth = 1.5; o.strokeStyle = col; o.stroke(); }
+function marker(o, x, y, label, hot) {
+  if (x < -20 || y < -20 || x > W + 20 || y > H + 20) return;
+  const r = hot ? 11 : 8;
+  o.beginPath(); o.arc(x, y, r, 0, Math.PI * 2); o.fillStyle = hot ? PAL.accent : "#000"; o.fill();
+  o.lineWidth = 2; o.strokeStyle = PAL.accent; o.stroke();
+  o.beginPath(); o.moveTo(x - r - 5, y); o.lineTo(x - r - 1, y); o.moveTo(x + r + 1, y); o.lineTo(x + r + 5, y); o.moveTo(x, y - r - 5); o.lineTo(x, y - r - 1); o.moveTo(x, y + r + 1); o.lineTo(x, y + r + 5); o.stroke();
+  o.font = `600 ${hot ? 11 : 10}px "IBM Plex Mono", monospace`; o.textAlign = "center"; o.textBaseline = "middle"; o.fillStyle = hot ? "#000" : PAL.accent; o.fillText(label, x, y + 0.5);
+}
+
+/* ---------- screen positions, for picking and the lasso ---------- */
+let PX = null, PY = null, PZ = null, projV = 0;
+function projectAll() {
+  if (projV === camV) return;
+  if (!PX) { PX = new Float32Array(S.n); PY = new Float32Array(S.n); PZ = new Float32Array(S.n); }
+  const b = bas(), [ex, ey, ez] = b.eye, [rx, ry, rz] = b.right, [ux, uy, uz] = b.up, [fx, fy, fz] = b.fwd, P = S.P;
+  for (let i = 0, j = 0; i < S.n; i++, j += 3) {
+    const dx = P[j] - ex, dy = P[j + 1] - ey, dz = P[j + 2] - ez, z = dx * fx + dy * fy + dz * fz;
+    PZ[i] = z; if (z < NEAR) continue;
+    PX[i] = W / 2 + ((dx * rx + dy * ry + dz * rz) * b.F) / z; PY[i] = H / 2 - ((dx * ux + dy * uy + dz * uz) * b.F) / z;
+  }
+  projV = camV;
+}
+function pick(x, y, radius = 7) {
+  projectAll();
+  let best = -1, bs = Infinity; const r2 = radius * radius;
+  for (let i = 0; i < S.n; i++) {
+    if (PZ[i] < NEAR) continue; const dx = PX[i] - x, dy = PY[i] - y, dd = dx * dx + dy * dy;
+    if (dd > r2) continue; const s = dd + (PZ[i] / cam.dist) * 6;  // prefer the nearer of overlapping games
+    if (s < bs) { bs = s; best = i; }
+  }
+  return best;
+}
+function pickIdea(x, y) { for (let i = S.ideas.length - 1; i >= 0; i--) { const p = projQ(qOf(S.ideas[i])); if (p && Math.hypot(p[0] - x, p[1] - y) < 12) return S.ideas[i]; } return null; }
+
+/* ---------- interaction ---------- */
+const lasso = { pts: [] };
+const pointers = new Map(); let drag = null, pinch = null, moved = false;
+function setTool(t) { S.tool = t; $("t-pan").setAttribute("aria-pressed", t === "pan"); $("t-lasso").setAttribute("aria-pressed", t === "lasso"); plate.classList.toggle("lasso", t === "lasso"); plate.classList.toggle("pan", t === "pan"); }
+const local = (e) => { const r = over.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+over.addEventListener("contextmenu", (e) => e.preventDefault());
+over.addEventListener("pointerdown", (e) => {
+  try { over.setPointerCapture(e.pointerId); } catch (err) { /* synthetic or already-released pointer */ }
+  pointers.set(e.pointerId, local(e)); moved = false; tween = null;
+  if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), m: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] }; drag = null; lasso.pts = []; return; }
+  const [x, y] = local(e);
+  // Shift-drag adds to the selection and Ctrl-drag removes from it, with either tool; the lasso tool alone starts afresh
+  const op = e.button !== 0 ? null : e.shiftKey ? "add" : e.ctrlKey || e.metaKey ? "sub" : S.tool === "lasso" ? "set" : null;
+  if (op) { lasso.pts = [[x, y]]; lasso.op = op; }
+  else { drag = { x, y, lx: x, ly: y, pan: e.button !== 0 || e.altKey || S.dim === 2 }; plate.classList.add("dragging"); }
+});
+over.addEventListener("pointermove", (e) => {
+  const [x, y] = local(e);
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, [x, y]);
+  if (pinch && pointers.size === 2) {
+    const [a, b] = [...pointers.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]), m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    panBy(m[0] - pinch.m[0], m[1] - pinch.m[1]); zoomAt(d / pinch.d, m[0], m[1]); pinch.d = d; pinch.m = m; return;
+  }
+  if (lasso.pts.length) { const l = lasso.pts[lasso.pts.length - 1]; if (Math.hypot(l[0] - x, l[1] - y) > 3) { moved = true; lasso.pts.push([x, y]); renderOverlay(); } return; }
+  if (drag) {
+    if (Math.hypot(x - drag.x, y - drag.y) > 3) moved = true;
+    const dx = x - drag.lx, dy = y - drag.ly; drag.lx = x; drag.ly = y;
+    if (drag.pan) panBy(dx, dy);
+    else { cam.yaw -= dx * 0.006; cam.pitch = Math.max(-1.5, Math.min(1.5, cam.pitch + dy * 0.006)); camChanged(); }
+    return;
+  }
+  hoverAt(x, y);
+});
+function panBy(dx, dy) { const b = bas(), s = cam.dist / b.F; cam.t = cam.t.map((v, i) => v - b.right[i] * dx * s + b.up[i] * dy * s); camChanged(); }
+function endPointer(e) {
+  pointers.delete(e.pointerId); plate.classList.remove("dragging");
+  if (pinch) { if (pointers.size < 2) pinch = null; return; }
+  if (lasso.pts.length) {
+    const pts = lasso.pts; lasso.pts = [];
+    if (pts.length > 4) finishLasso(pts, lasso.op);
+    else { renderOverlay(); if (!moved && lasso.op !== "set") clickAt(...local(e)); }  // a Shift/Ctrl click is still a click
+    return;
+  }
+  if (drag && !moved) { const [x, y] = local(e); clickAt(x, y); }
+  drag = null; draw();
+}
+over.addEventListener("pointerup", endPointer);
+over.addEventListener("pointercancel", endPointer);
+over.addEventListener("pointerleave", () => { if (!drag) { S.hover = -1; $("tip").hidden = true; renderOverlay(); } });
+over.addEventListener("wheel", (e) => { e.preventDefault(); tween = null; const [x, y] = local(e); zoomAt(Math.exp(-e.deltaY * 0.0015), x, y); }, { passive: false });
+over.addEventListener("dblclick", (e) => { const [x, y] = local(e); zoomAt(2, x, y); });
+let hoverRaf = 0, hoverXY = null;
+function hoverAt(x, y) {
+  hoverXY = [x, y]; if (hoverRaf) return;
+  hoverRaf = requestAnimationFrame(() => {
+    hoverRaf = 0; const [x, y] = hoverXY;
+    const idea = pickIdea(x, y), tip = $("tip");
+    if (idea !== S.hoverIdea) { S.hoverIdea = idea; renderOverlay(); }
+    if (idea) { tip.innerHTML = `<b>${esc(idea.title)}</b><span>idea · novelty ${f3(idea.novelty)}</span>`; place(tip, x, y); S.hover = -1; renderOverlay(); return; }
+    const i = pick(x, y);
+    if (i !== S.hover) { S.hover = i; renderOverlay(); }
+    if (i >= 0) { tip.innerHTML = `<b>${esc(S.names[i])}</b><span>${esc(S.data.clusters[S.C[i]].name)}</span>`; place(tip, x, y); } else tip.hidden = true;
+  });
+}
+function place(tip, x, y) { tip.hidden = false; const w = tip.offsetWidth, h = tip.offsetHeight; tip.style.left = Math.min(W - w - 8, x + 14) + "px"; tip.style.top = Math.max(8, y - h - 10) + "px"; }
+function pickHole(x, y) {
+  if (!S.showHoles) return null;
+  let best = null, bz = Infinity;
+  for (const h of holesNow()) { const p = projQ(qOf(h)); if (!p) continue; const r = Math.max(8, ((h.r / WS.k) * bas().F) / p[2]); if (Math.hypot(p[0] - x, p[1] - y) <= r && p[2] < bz) { bz = p[2]; best = h; } }
+  return best;
+}
+function emptySpot(x, y) {
+  // a click on empty space has no depth: take it from the games drawn around the click, weighted by closeness
+  projectAll();
+  let sw = 0, sz = 0;
+  for (let i = 0; i < S.n; i++) { if (PZ[i] < NEAR) continue; const d = Math.hypot(PX[i] - x, PY[i] - y); if (d < 40) { const w = 1 / (d + 4); sw += w; sz += w * PZ[i]; } }
+  return toQ(unproj(x, y, sw ? sz / sw : cam.dist));
+}
+function clickAt(x, y) {
+  if (S.job) return;  // keep the progress panel while a game is being written
+  const idea = pickIdea(x, y); if (idea) return openIdea(idea);
+  const i = pick(x, y); if (i >= 0) return openGame(i);
+  const h = pickHole(x, y); if (h) return openSpot(qOf(h), h.r, h);
+  openSpot(emptySpot(x, y), null, null);
+}
+window.addEventListener("keydown", (e) => {
+  if (e.target.closest("input, select, textarea") || $("intro").open) return;
+  if (e.key === "l" || e.key === "L") setTool("lasso");
+  else if ("pPoO".includes(e.key)) setTool("pan");
+  else if (e.key === "2" || e.key === "3") setDim(+e.key);
+  else if (e.key === "Escape") { S.spot = null; S.game = null; S.pinned = -1; clearSelection(); }
+});
+$("v2").onclick = () => setDim(2);
+$("v3").onclick = () => setDim(3);
+$("t-pan").onclick = () => setTool("pan");
+$("t-lasso").onclick = () => setTool("lasso");
+$("t-zin").onclick = () => zoomAt(1.6, W / 2, H / 2);
+$("t-zout").onclick = () => zoomAt(1 / 1.6, W / 2, H / 2);
+$("t-reset").onclick = () => { tween = null; fit(); };
+$("t-drift").setAttribute("aria-pressed", drift);
+$("t-drift").onclick = () => { drift = !drift; $("t-drift").setAttribute("aria-pressed", drift); draw(); };
+$("t-labels").onclick = () => { S.labels = !S.labels; $("t-labels").setAttribute("aria-pressed", S.labels); renderOverlay(); };
+$("t-holes").onclick = () => { S.showHoles = !S.showHoles; $("t-holes").setAttribute("aria-pressed", S.showHoles); renderOverlay(); };
+
+/* ---------- 2-D / 3-D ---------- */
+const CAMS = {};  // each view keeps its own camera, so switching back returns to where you were
+function setDim(d) {
+  if (d === S.dim || !LAY[d].P || !GLS) return;
+  CAMS[S.dim] = { yaw: cam.yaw, pitch: cam.pitch, dist: cam.dist, t: cam.t.slice(), fitDist };
+  S.dim = d; WS = LAY[d]; S.P = WS.P; S.spot = null; tween = null;
+  gl.bindBuffer(gl.ARRAY_BUFFER, GLS.pos); gl.bufferData(gl.ARRAY_BUFFER, S.P, gl.STATIC_DRAW);
+  const c = CAMS[d];
+  if (c) { cam.yaw = c.yaw; cam.pitch = c.pitch; cam.dist = c.dist; cam.t = c.t; fitDist = c.fitDist; camChanged(); } else fit();
+  // keep what you were looking at in view: the open game or idea moves to its place in the other layout
+  if (S.game) flyTo(S.game.row, false); else if (S.focus && qOf(S.focus)) flyTo3(toW(qOf(S.focus)), cam.dist);
+  S.settings.dim = d; saveSettings(); dimUI(); renderLedger();
+}
+function dimUI() {
+  const three = S.dim === 3;
+  $("v2").setAttribute("aria-pressed", !three); $("v3").setAttribute("aria-pressed", three);
+  $("dim-tag").textContent = three ? "3D" : "2D";
+  $("t-pan").innerHTML = three ? "Orbit <kbd>O</kbd>" : "Pan <kbd>P</kbd>";
+  $("t-pan").title = three ? "Drag to orbit, right-drag (or Alt-drag) to pan, scroll to zoom" : "Drag to pan, scroll to zoom";
+  $("t-drift").hidden = !three;
+  $("legend").textContent = `Each point of light is a Steam game, brighter with more reviews; similar store pages sit together. ${three ? "Drag to orbit, right-drag to pan" : "Drag to pan"}, scroll to zoom. Shift-drag adds games to the selection, Ctrl-drag removes them. The map is a ${three ? "3-D" : "2-D"} projection of a high-dimensional space, so isolation is measured in the full space, not by distance here.`;
+  over.setAttribute("aria-label", `${three ? "3-D" : "2-D"} map of Steam games. Each point of light is a game; nearby points have similar store pages.`);
+}
+
+/* ---------- selection ---------- */
+function finishLasso(pts, op = "set") {
+  // the lasso takes every game drawn inside it, at any depth: as a new selection, added to it, or removed from it
+  if (op === "sub" && !S.sel) return renderOverlay();
+  projectAll();
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; for (const [x, y] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  const mask = op !== "set" && S.sel ? S.sel.mask.slice() : new Uint8Array(S.n), val = op === "sub" ? 0 : 1, rows = [];
+  for (let i = 0; i < S.n; i++) {
+    if (PZ[i] < NEAR) continue; const x = PX[i], y = PY[i]; if (x < x0 || x > x1 || y < y0 || y > y1) continue;
+    let inside = false;
+    for (let a = 0, b = pts.length - 1; a < pts.length; b = a++) { const [xa, ya] = pts[a], [xb, yb] = pts[b]; if ((ya > y) !== (yb > y) && x < xa + ((y - ya) * (xb - xa)) / (yb - ya)) inside = !inside; }
+    if (inside) mask[i] = val;
+  }
+  for (let i = 0; i < S.n; i++) if (mask[i]) rows.push(i);
+  if (!rows.length) return clearSelection();
+  const sel = { rows, mask, count: rows.length, summary: null };
+  S.sel = sel; S.focus = null; S.spot = null; S.game = null; draw();
+  renderLedger();
+  if (S.live && rows.length) post("api/select", { rows }).then((sum) => { if (S.sel === sel) { sel.summary = sum; renderLedger(); } }).catch(() => {});
+}
+function clearSelection() { S.sel = null; S.pinned = -1; draw(); renderLedger(); }
+function selectionLocal() {
+  // client-side summary for the static page: dominant regions and best-known games
+  const counts = new Map(), top = [];
+  for (const i of S.sel.rows) { counts.set(S.C[i], (counts.get(S.C[i]) || 0) + 1); top.push(i); }
+  top.sort((a, b) => S.R[b] - S.R[a]);
+  return { clusters: [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([c, k]) => [S.data.clusters[c].name, k / S.sel.count]), notable: top.slice(0, 8).map((i) => ({ name: S.names[i], appid: S.appid[i] })) };
+}
+
+/* ---------- server calls ---------- */
+const OFFLINE = "Can't reach the IdeaPlotter server. Make sure the run.bat window is still open (double-click run.bat again if you closed it), then reload this page.";
+const friendly = (e) => (/failed to fetch|networkerror|load failed/i.test(e && e.message) ? OFFLINE : (e && e.message) || String(e));
+async function post(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); return j;
+}
+async function explore(spec) {
+  try {
+    const { job } = await post("api/explore", { ...spec, rounds: S.settings.rounds });
+    S.job = { id: job, mode: spec.mode, status: "searching", events: [], count: spec.count || 0, fails: 0 };
+  } catch (e) { S.job = { mode: spec.mode, status: "error", error: friendly(e), events: [] }; }
+  renderLedger(); renderOverlay(); poll();
+}
+async function poll() {
+  const job = S.job; if (!job || !job.id || job.status === "error") return;
+  try {
+    const j = await (await fetch("api/job/" + job.id)).json();
+    job.fails = 0; Object.assign(job, j);
+    if (j.status === "done" && j.idea) { S.ideas.push(j.idea); sortIdeas(); S.job = null; S.sel = null; S.spot = null; openIdea(j.idea); return; }
+    renderLedger(); renderOverlay();
+    if (j.status !== "error") setTimeout(poll, 1000);
+  } catch (e) {
+    job.fails = (job.fails || 0) + 1;
+    if (job.fails >= 4) { job.status = "error"; job.error = OFFLINE; renderLedger(); return; }
+    setTimeout(poll, 2000);
+  }
+}
+function sortIdeas() { S.ideas.sort((a, b) => b.novelty - a.novelty); }
+const roundsField = () => `<label class="field" for="rounds">Revision rounds<select id="rounds"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label>`;
+const serverNote = `<p class="small muted">Writing games needs the local server: double-click <code>run.bat</code>.</p>`;
+
+/* ---------- ledger (side panel) ---------- */
+const ledger = $("ledger");
+function renderLedger() {
+  let html;
+  if (S.job) html = jobView() + listView();
+  else if (S.sel) html = selectionView() + listView();
+  else if (S.focus) html = ideaView(S.focus);
+  else if (S.spot) html = trayView() + spotView() + listView();
+  else if (S.game) html = trayView() + gameView() + listView();
+  else html = trayView() + introView() + listView();
+  ledger.innerHTML = html;
+  wireFields();
+}
+function wireFields() {
+  const a = $("anchors"), r = $("rounds");
+  if (a) { a.value = S.settings.anchors; a.onchange = () => { S.settings.anchors = a.value; saveSettings(); }; }
+  if (r) { r.value = String(S.settings.rounds); r.onchange = () => { S.settings.rounds = +r.value; saveSettings(); }; }
+}
+function introView() {
+  const m = S.data.meta, nh = holesNow().length;
+  return `<section class="section">
+    <div class="eyebrow">How to use the map</div>
+    <h2>Find the places no game has been</h2>
+    <p class="small">Each of the ${m.n.toLocaleString()} points of light is a Steam game, placed by what its store page says. Every way of exploring ends the same way: IdeaPlotter finds a point in the space that no game occupies, writes the game that would live there, then measures where that game's page actually lands and revises it.</p>
+    <div class="actions small">
+      <div><b>Holes.</b> The ${nh} dashed rings are empty pockets inside the cloud with games on every side. Click one, or click any empty spot, to write the game that fills the gap.</div>
+      <div><b>Areas.</b> Press <kbd>L</kbd> and draw around a region to find the emptiest spot inside it. The lasso takes every game drawn inside it, front to back. Hold <kbd>Shift</kbd> while drawing to add games, <kbd>Ctrl</kbd> to remove them.</div>
+      <div><b>Games.</b> Search or click a point to see its closest and furthest games, and add it to a blend. Combine 2–8 games to get the mix furthest from everything on Steam.</div>
+    </div>
+    ${S.live ? `<div class="row">${roundsField()}<button class="btn" id="go-global">Find the emptiest spot anywhere</button></div>` : serverNote}
+    <p class="small muted">The map is a ${S.dim}-D projection of a ${m.dim}-dimensional space; switch layouts with 2D / 3D at the top. Novelty is always measured in the full space.</p>
+  </section>`;
+}
+function listView() {
+  if (!S.ideas.length) return `<div class="empty">No ideas yet.</div>`;
+  return `<section class="section" style="padding-bottom:6px"><div class="eyebrow">Ideas, most novel first</div></section>
+  <div class="list">${S.ideas.map((d, i) => `<button class="item" data-i="${i}"><span class="rk">${i + 1}</span><span><div class="t">${esc(d.title)}</div><div class="s">${esc(d.short_description)}</div></span><span class="nv" title="novelty">${f3(d.novelty)}</span></button>`).join("")}</div>`;
+}
+function trayView() {
+  if (!S.blend.length) return "";
+  const chips = S.blend.map((r) => `<span class="chip">${esc(S.names[r])}<button data-unblend="${r}" aria-label="Remove ${esc(S.names[r])}">×</button></span>`).join("");
+  return `<section class="section tray">
+    <div class="eyebrow">Combine games · ${S.blend.length} of 8</div>
+    <div class="chips">${chips}</div>
+    ${S.blend.length < 2 ? `<p class="small muted">Add at least one more game: search for it, or click its point on the map.</p>` : ""}
+    ${S.live ? `<div class="row">${roundsField()}<button class="btn" id="go-blend" ${S.blend.length < 2 ? "disabled" : ""}>Find the most novel mix and write a game</button></div>` : serverNote}
+    <div class="row"><button class="btn ghost" id="blend-clear">Clear blend</button></div>
+  </section>`;
+}
+function nbrList(items, far) {
+  return `<div class="nbrs">${items.map((c) => `<div class="n${far ? " far" : ""}"><b>${f3(c.sim)}</b><span><button class="link" data-game="${c.row}">${esc(c.name)}</button></span></div>`).join("")}</div>`;
+}
+function gameView() {
+  const g = S.game, i = g.row, c = g.card, inBlend = S.blend.includes(i);
+  const blendBtn = `<button class="btn ghost" id="blend-toggle" data-row="${i}" ${!inBlend && S.blend.length >= 8 ? "disabled" : ""}>${inBlend ? "Remove from blend" : "Add to blend"}</button>`;
+  const head = `<section class="section">
+    <button class="back" id="back-game">← Back</button>
+    <div class="eyebrow">Game · ${esc(S.data.clusters[S.C[i]].name)}</div>
+    <h2>${esc(S.names[i])}</h2>
+    ${S.live ? `<img class="header-img" alt="" loading="lazy" src="https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${S.appid[i]}/header.jpg" onerror="this.hidden=true">` : ""}
+    ${c && (c.short_description || g.short) ? `<p class="small">${esc(c.short_description || g.short)}</p>` : ""}
+    ${c ? `<div class="chips">${c.tags.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>` : ""}
+    ${S.live ? (g.about ? `<details><summary class="small">About this game</summary><p class="small store-about">${esc(g.about)}</p></details>`
+      : `<p class="small muted">${g.aboutError ? esc(g.aboutError) : g.about === "" ? "Steam has no About text for this game." : "Looking up its store page…"}</p>`) : ""}
+    <div class="row"><a class="small" href="${store(S.appid[i])}" target="_blank" rel="noopener">Open on Steam</a>${blendBtn}</div>
+  </section>`;
+  if (!S.live) return head + `<section class="section"><p class="small muted">Closest and furthest games need the local server: double-click <code>run.bat</code>.</p></section>`;
+  if (!c) return head + `<section class="section"><p class="small muted">${g.error ? esc(g.error) : "Measuring against every game…"}</p></section>`;
+  return head + `<section class="section">
+    <p class="small">Its closest twin is <b>${esc(c.closest[0].name)}</b> at ${f3(c.nearest_twin_sim)} similarity, so it is more isolated than ${pct(c.isolation_pct)} of Steam games.</p>
+    <div class="cols">
+      <div class="kv"><h3>Closest games</h3>${nbrList(c.closest, false)}</div>
+      <div class="kv"><h3>Furthest games</h3>${nbrList(c.furthest, true)}</div>
+    </div>
+    <p class="small muted">Furthest only lists games with at least 50 reviews and a real store description. Lines on the map: grey to the closest, red to the furthest.</p>
+  </section>`;
+}
+function rimRegions(q, r) {
+  // the regions around a spot, one per direction (8 cube corners), from the nearest game in each
+  const best = new Array(8).fill(-1), bd = new Array(8).fill(Infinity), c = toW(q), lim = (Math.max(r || 0, 400) * 4) / WS.k;
+  for (let i = 0, j = 0; i < S.n; i++, j += 3) {
+    const dx = S.P[j] - c[0], dy = S.P[j + 1] - c[1], dz = S.P[j + 2] - c[2]; if (Math.abs(dx) > lim || Math.abs(dy) > lim || Math.abs(dz) > lim) continue;
+    const d = dx * dx + dy * dy + dz * dz, k = (dx > 0 ? 1 : 0) + (dy > 0 ? 2 : 0) + (dz > 0 ? 4 : 0);
+    if (d < bd[k]) { bd[k] = d; best[k] = i; }
+  }
+  return [...new Set(best.filter((i) => i >= 0).map((i) => S.data.clusters[S.C[i]].name))];
+}
+function spotView() {
+  const sp = S.spot, regions = sp.regions;
+  return `<section class="section">
+    <button class="back" id="back-spot">← Back</button>
+    <div class="eyebrow">${sp.hole ? "Unexplored hole" : "Empty spot"}</div>
+    <h2>${regions.length > 1 ? `A gap between ${regions.length} regions` : "An empty spot"}</h2>
+    <div class="chips">${regions.map((n) => `<span class="chip">${esc(n)}</span>`).join("")}</div>
+    <p class="small">No game sits here on the map. To turn the gap into a point in the full space, IdeaPlotter takes games from different sides of it, blends them, and pushes the blend as far from every Steam game as it will go. Then it writes the game that fills the gap.</p>
+    ${S.live ? `<div class="row">${roundsField()}<button class="btn" id="go-spot">Write a game for this gap</button></div>` : serverNote}
+  </section>`;
+}
+ledger.addEventListener("click", (e) => {
+  const t = e.target;
+  const it = t.closest(".item"); if (it) return openIdea(S.ideas[+it.dataset.i]);
+  const gm = t.closest("[data-game]"); if (gm) { flyTo(+gm.dataset.game, false); return openGame(+gm.dataset.game); }
+  const ub = t.closest("[data-unblend]"); if (ub) { S.blend = S.blend.filter((r) => r !== +ub.dataset.unblend); renderLedger(); return renderOverlay(); }
+  if (t.closest("#blend-toggle")) { const r = S.game.row; S.blend = S.blend.includes(r) ? S.blend.filter((x) => x !== r) : [...S.blend, r]; renderLedger(); return renderOverlay(); }
+  if (t.closest("#blend-clear")) { S.blend = []; renderLedger(); return renderOverlay(); }
+  if (t.closest("#back")) { S.focus = null; S.pinned = -1; renderLedger(); return renderOverlay(); }
+  if (t.closest("#back-game")) { S.game = null; S.pinned = -1; renderLedger(); return renderOverlay(); }
+  if (t.closest("#back-spot")) { S.spot = null; renderLedger(); return renderOverlay(); }
+  if (t.closest("#clear")) return clearSelection();
+  if (t.closest("#go")) return explore({ mode: "area", rows: S.sel.rows, anchors: S.settings.anchors, count: S.sel.count });
+  if (t.closest("#go-blend")) return explore({ mode: "blend", rows: S.blend, count: S.blend.length });
+  if (t.closest("#go-spot")) return explore({ mode: "hole", center: S.spot.q, radius: S.spot.r });
+  if (t.closest("#go-global")) return explore({ mode: "global" });
+  if (t.closest("#retry")) { S.job = null; renderLedger(); return renderOverlay(); }
+  if (t.closest("#again") && S.focus) {
+    const d = S.focus; S.focus = null;
+    if (d.area) return explore({ mode: "area", idea: d.id, anchors: S.settings.anchors, count: d.selection_count });
+    if (d.hole) return explore({ mode: "hole", center: d.hole.xyz || d.hole.xy, radius: d.hole.r });
+    if (d.blend_rows) return explore({ mode: "blend", rows: d.blend_rows, count: d.blend_rows.length });
+    return explore({ mode: "global" });
+  }
+  const g = t.closest("[data-row]"); if (g && g.dataset.row !== "" && !t.closest("#blend-toggle")) flyTo(+g.dataset.row, false);
+});
+function selectionView() {
+  const s = S.sel, sum = s.summary || (S.live ? null : selectionLocal());
+  const tags = sum && sum.tags ? `<div class="kv"><h3>Common tags</h3><div class="chips">${sum.tags.slice(0, 12).map(([t, p]) => `<span class="chip">${esc(t)}<i>${Math.round(p * 100)}%</i></span>`).join("")}</div></div>` : "";
+  const clusters = sum ? `<div class="kv"><h3>Regions</h3><div class="chips">${sum.clusters.map(([n, p]) => `<span class="chip">${esc(n)}<i>${Math.round(p * 100)}%</i></span>`).join("")}</div></div>` : "";
+  const notable = sum ? `<div class="kv"><h3>Best-known games here</h3><p class="small">${sum.notable.map((g) => `<a href="${store(g.appid)}" target="_blank" rel="noopener">${esc(g.name)}</a>`).join(", ")}</p></div>` : `<p class="small muted">Reading the area…</p>`;
+  const controls = S.live ? `<div class="row">
+      <label class="field" for="anchors">Blend size<select id="anchors"><option value="2-3">2–3 games</option><option value="2-4">2–4 games</option><option value="4-8">4–8 games (deeper void)</option></select></label>
+      ${roundsField()}
+    </div>
+    <div class="row"><button class="btn" id="go" ${s.count < 2 ? "disabled" : ""}>Find a void here and write a game</button><button class="btn ghost" id="clear">Clear</button></div>`
+    : `${serverNote}<div class="row"><button class="btn ghost" id="clear">Clear</button></div>`;
+  return `<section class="section">
+    <div class="eyebrow">Selected area</div>
+    <h2>${s.count.toLocaleString()} games</h2>
+    <p class="small muted">Shift-drag to add games, Ctrl-drag to remove them.</p>
+    ${sum && sum.nn_median != null ? `<p class="small muted">Games here typically have a near twin at ${f3(sum.nn_median)} similarity.</p>` : ""}
+    ${clusters}${tags}${notable}${controls}
+  </section>`;
+}
+const JOB_TITLES = { area: "Exploring the area", blend: "Combining your games", hole: "Exploring the gap", global: "Searching all of Steam" };
+function searchText(j) {
+  if (j.mode === "blend") return `Searching for the mix of your ${j.count} games that sits furthest from every game on Steam…`;
+  if (j.mode === "hole") return "Collecting games from every side of the gap and searching their blends for the emptiest point…";
+  if (j.mode === "global") return "Sampling blends of related games across all of Steam and searching for the emptiest one…";
+  return `Searching blends of the ${(j.count || 0).toLocaleString()} games in this area for the emptiest point…`;
+}
+function jobView() {
+  const j = S.job, title = JOB_TITLES[j.mode] || JOB_TITLES.area;
+  if (j.status === "error") return `<section class="section"><div class="eyebrow">${title}</div><p class="err">${esc(j.error)}</p><div class="row"><button class="btn ghost" id="retry">Back</button></div></section>`;
+  const v = j.void, rounds = (j.events || []).filter((e) => e.kind === "round");
+  const steps = [];
+  steps.push(`<li class="${v ? "done" : "active"}"><div>${v ? `Searched ${(v.candidates || 0).toLocaleString()} candidate blends.` : searchText(j)}</div></li>`);
+  if (v) {
+    const around = v.surrounding_regions && v.surrounding_regions.length ? `<div class="chips" style="margin-top:6px">${v.surrounding_regions.map((n) => `<span class="chip">${esc(n)}</span>`).join("")}</div>` : "";
+    steps.push(`<li class="done"><div><b>Void found.</b> The closest game to this point is ${esc(v.nearest[0].name)}, at ${f3(v.nearest_sim)} similarity. It is a blend of these games <span class="muted" title="Length of the blended vector before normalising: 1 means one game, lower means the ingredients disagree more">(coherence ${f3(v.coherence)})</span>:
+      <div class="recipe" style="margin-top:6px">${v.anchors.map((a) => `<div class="r"><b>${Math.round(a.weight * 100)}%</b><span>${esc(a.name)}</span></div>`).join("")}</div>${around}
+      <div class="chips" style="margin-top:6px">${v.predicted_tags.slice(0, 8).map(([t, p]) => `<span class="chip">${esc(t)}<i>${p.toFixed(2)}</i></span>`).join("")}</div></div></li>`);
+    for (const r of rounds) steps.push(`<li class="done"><div><b>Draft ${r.round}: ${esc(r.title)}</b><br><span class="small muted">fit to void ${f3(r.target_sim)} · nearest ${esc(r.nearest)} ${f3(r.nearest_sim)} · ${r.landed ? "landed" : "not yet inside"}</span></div></li>`);
+    steps.push(`<li class="active"><div>${rounds.length ? "Revising against the measurements…" : "Writing the first draft…"}</div></li>`);
+  }
+  return `<section class="section"><div class="eyebrow">${title}</div><h2>${v ? "Writing the game" : "Looking for empty space"}</h2><ul class="timeline">${steps.join("")}</ul></section>`;
+}
+function histogram(idea) {
+  const m = S.data.meta, w = 340, h = 86, padL = 4, padR = 4, top = 8, base = 62;
+  const max = Math.max(...m.hist), bw = (w - padL - padR) / m.hist.length;
+  const X = (v) => padL + Math.max(0, Math.min(1, (v - m.hist_lo) / (m.hist_hi - m.hist_lo))) * (w - padL - padR);
+  const bars = m.hist.map((c, i) => `<rect x="${(padL + i * bw).toFixed(1)}" y="${(base - (c / max) * (base - top)).toFixed(1)}" width="${(bw - 1).toFixed(1)}" height="${((c / max) * (base - top)).toFixed(1)}" fill="var(--rule)"></rect>`).join("");
+  const ticks = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0].filter((t) => t >= m.hist_lo && t <= m.hist_hi)
+    .map((t) => `<text x="${X(t).toFixed(1)}" y="${base + 13}" text-anchor="${t === m.hist_hi ? "end" : t - m.hist_lo < 0.03 ? "start" : "middle"}">${t.toFixed(1)}</text>`).join("");
+  const mark = (v, col, label, dy) => v == null ? "" : `<line x1="${X(v).toFixed(1)}" x2="${X(v).toFixed(1)}" y1="${top - 4}" y2="${base}" stroke="${col}" stroke-width="2"></line><text x="${Math.min(w - 4, Math.max(4, X(v))).toFixed(1)}" y="${base + 24 + dy}" text-anchor="${X(v) > w * 0.7 ? "end" : X(v) < w * 0.3 ? "start" : "middle"}" style="fill:${col}">${label}</text>`;
+  return `<svg class="hist" viewBox="0 0 ${w} ${h + 14}" width="100%" role="img" aria-label="Distribution of each Steam game's similarity to its nearest neighbour, with this idea marked">
+    ${bars}<line x1="${padL}" x2="${w - padR}" y1="${base}" y2="${base}" stroke="var(--muted)" stroke-width="1"></line>${ticks}
+    ${mark(m.rewrite_sim, "var(--muted)", "rewrite of a game " + f3(m.rewrite_sim), 12)}
+    ${mark(idea.nearest_sim, "var(--accent)", "this idea " + f3(idea.nearest_sim), 0)}
+  </svg><p class="small muted">Bars: every Steam game's similarity to its closest other game (median ${f3(m.typical_nn)}). Further left is more isolated.</p>`;
+}
+function ideaView(d) {
+  const rank = S.ideas.indexOf(d) + 1;
+  const landed = d.landed ? `<span class="pill good">landed in the void</span>` : `<span class="pill warn">nearer a game than its void</span>`;
+  const via = d.viability >= 7 ? "good" : d.viability >= 4 ? "warn" : "bad";
+  return `<section class="section">
+    <button class="back" id="back">← All ideas</button>
+    <div class="eyebrow">Idea ${rank} of ${S.ideas.length} · ${sourceLabel(d)}</div>
+    <h2>${esc(d.title)}</h2>
+    <div class="row">${landed}<span class="pill ${via}">viability ${d.viability}/10</span></div>
+    ${S.live ? `<div class="row"><button class="btn ghost" id="again">${againLabel(d)}</button></div>` : ""}
+    ${d.surrounding_regions && d.surrounding_regions.length ? `<div class="kv"><h3>The gap it fills sits between</h3><div class="chips">${d.surrounding_regions.map((n) => `<span class="chip">${esc(n)}</span>`).join("")}</div></div>` : ""}
+    <div class="metrics">
+      <div class="metric"><b>${f3(d.novelty)}</b><span>novelty (1 − nearest similarity)</span></div>
+      <div class="metric"><b>${pct(d.isolation_pct)}</b><span>of Steam games are less isolated</span></div>
+      <div class="metric"><b>${f3(d.target_sim)}</b><span>fit to the void it was aimed at</span></div>
+    </div>
+    ${histogram(d)}
+  </section>
+  <section class="section idea-text">
+    <p class="short">${esc(d.short_description)}</p>
+    <p class="about small">${esc(d.about)}</p>
+    <div class="chips">${(d.tags || []).map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>
+  </section>
+  <section class="section">
+    <div class="kv"><h3>Core loop</h3><p class="small">${esc(d.core_loop)}</p></div>
+    <div class="kv"><h3>Why it's new</h3><p class="small">${esc(d.why_new)}</p></div>
+    <div class="kv"><h3>Viability</h3><p class="small">${esc(d.viability_note)}</p></div>
+  </section>
+  <section class="section">
+    <div class="kv"><h3>Recipe: the void is a blend of</h3><div class="recipe">${d.anchors.map((a) => `<div class="r"><b>${Math.round(a.weight * 100)}%</b><span><a href="${store(a.appid)}" target="_blank" rel="noopener">${esc(a.name)}</a> <button class="back" data-row="${a.row ?? ""}">show</button></span></div>`).join("")}</div></div>
+    <div class="kv"><h3>Closest existing games to the idea</h3><div class="nbrs">${d.neighbors.map((n) => `<div class="n"><b>${f3(n.sim)}</b><span><a href="${store(n.appid)}" target="_blank" rel="noopener">${esc(n.name)}</a> <button class="back" data-row="${n.row ?? ""}">show</button></span></div>`).join("")}</div></div>
+    <div class="kv"><h3>Drafts</h3><div class="nbrs">${(d.rounds || []).map((r, i) => `<div class="n"><b>${f3(r.nearest_sim)}</b><span>${esc(r.title)} <span class="muted small">fit ${f3(r.target_sim)}${i + 1 === d.best_round ? " · kept" : ""}</span></span></div>`).join("")}</div></div>
+  </section>`;
+}
+function sourceLabel(d) {
+  if (d.source === "area") return `from a lassoed area of ${(d.selection_count || 0).toLocaleString()} games`;
+  if (d.source === "blend") return "from games you combined";
+  if (d.source === "hole") return "from a gap in the map";
+  if (d.source === "global") return "from the emptiest spot search";
+  return "from the batch void search";
+}
+function againLabel(d) {
+  if (d.area) return "Find another void in this area";
+  if (d.hole) return "Write another game for this gap";
+  if (d.blend_rows) return "Try another mix of these games";
+  return "Find another empty spot";
+}
+function openIdea(d) {
+  S.focus = d; S.sel = null; S.spot = null; S.game = null; S.pinned = -1; renderLedger(); ledger.scrollTop = 0;
+  if (qOf(d)) flyTo3(toW(qOf(d)), Math.min(cam.dist, fitDist * 0.45));
+  draw();
+}
+async function openGame(i) {
+  if (S.job) return;
+  S.game = { row: i, card: null }; S.focus = null; S.sel = null; S.spot = null; S.pinned = i;
+  renderLedger(); ledger.scrollTop = 0; draw();
+  if (!S.live) return;
+  storeText(i);
+  try {
+    const r = await fetch("api/game/" + i), card = await r.json();
+    if (!r.ok) throw new Error(card.error || r.statusText);
+    if (S.game && S.game.row === i) { S.game.card = card; renderLedger(); renderOverlay(); }
+  } catch (e) { if (S.game && S.game.row === i) { S.game.error = friendly(e); renderLedger(); } }
+}
+async function storeText(i) {
+  // store copy is not shipped with the map: the server asks Steam for this one game (and caches it)
+  const mine = () => S.game && S.game.row === i;
+  try {
+    const r = await fetch("api/store/" + S.appid[i]), d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.statusText);
+    if (mine()) { S.game.about = d.about; S.game.short = d.short_description; renderLedger(); }
+  } catch (e) { if (mine()) { S.game.aboutError = friendly(e); renderLedger(); } }
+}
+function openSpot(q, r, hole) {
+  if (!r) {  // a free click: size the spot by the distance to the nearest game around it
+    const w = toW(q); let bd = Infinity;
+    for (let i = 0, j = 0; i < S.n; i++, j += 3) { const dx = S.P[j] - w[0], dy = S.P[j + 1] - w[1], dz = S.P[j + 2] - w[2]; bd = Math.min(bd, dx * dx + dy * dy + dz * dz); }
+    r = Math.max(250, Math.min(Math.sqrt(bd) * WS.k, 3000));
+  }
+  S.spot = { q, r, hole, regions: rimRegions(q, r) }; S.game = null; S.focus = null; S.sel = null; S.pinned = -1;
+  renderLedger(); ledger.scrollTop = 0; draw();
+}
+function flyTo(i, open = true) {
+  flyTo3([S.P[i * 3], S.P[i * 3 + 1], S.P[i * 3 + 2]], Math.min(cam.dist, fitDist * 0.25));
+  S.pinned = i; draw(); if (open) openGame(i);
+}
+
+/* ---------- search ---------- */
+const q = $("q"), qres = $("qres");
+q.addEventListener("input", () => {
+  const raw = q.value.trim(), t = raw.toLowerCase(); if (t.length < 2) { qres.hidden = true; return; }
+  const hits = []; for (let i = 0; i < S.n && hits.length < 40; i++) if (S.lower[i].includes(t)) hits.push(i);
+  hits.sort((a, b) => (S.lower[a].startsWith(t) ? 0 : 1) - (S.lower[b].startsWith(t) ? 0 : 1) || S.R[b] - S.R[a]);
+  // Steam is only asked when the reader clicks, never per keystroke
+  const steamRow = S.live ? `<li class="steam"><button data-steam>Not here? Search Steam for “${esc(raw)}”</button></li>` : "";
+  qres.innerHTML = (hits.slice(0, 10).map((i) => `<li><button data-i="${i}">${esc(S.names[i])}</button></li>`).join("") || `<li class="note">No game by that name on the map.</li>`) + steamRow;
+  qres.hidden = false;
+});
+async function searchSteam(term) {
+  qres.innerHTML = `<li class="note">Searching Steam…</li>`;
+  try {
+    const r = await fetch("api/search?q=" + encodeURIComponent(term)), hits = await r.json();
+    if (!r.ok) throw new Error(hits.error || r.statusText);
+    qres.innerHTML = hits.map((h) => h.row != null
+      ? `<li><button data-i="${h.row}">${esc(h.name)}<span class="muted">on the map</span></button></li>`
+      : `<li><button data-add="${h.appid}" data-name="${esc(h.name)}">${esc(h.name)}<span class="muted">add to map</span></button></li>`).join("")
+      || `<li class="note">Steam has no game by that name.</li>`;
+  } catch (e) { qres.innerHTML = `<li class="note">${esc(friendly(e))}</li>`; }
+  qres.hidden = false;
+}
+async function addGame(appid, name) {
+  // the server looks this one game up, embeds it like every other game and places it; then the map reloads with it
+  qres.innerHTML = `<li class="note">Adding ${esc(name)}: reading its store page and finding its place…</li>`;
+  try {
+    const d = await post("api/add", { appid });
+    location.hash = "game=" + d.row; location.reload();
+  } catch (e) { qres.innerHTML = `<li class="note">${esc(friendly(e))}</li>`; }
+}
+qres.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.hasAttribute("data-steam")) return searchSteam(q.value.trim());
+  if (b.dataset.add) return addGame(+b.dataset.add, b.dataset.name);
+  qres.hidden = true; q.value = ""; flyTo(+b.dataset.i);
+});
+document.addEventListener("click", (e) => { if (!e.target.closest(".search")) qres.hidden = true; });
+
+/* ---------- intro video ---------- */
+// shown once per browser, reopened from "What is this?"; the player only exists while the popup is open
+const intro = $("intro"), INTRO_VIDEO = "ObvISKp1dWo";
+function openIntro() {
+  if (intro.open) return;
+  $("intro-video").innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${INTRO_VIDEO}?rel=0" title="IdeaPlotter: what you are looking at" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`;
+  intro.showModal();
+}
+intro.addEventListener("close", () => {
+  $("intro-video").innerHTML = "";  // stops playback
+  try { localStorage.setItem("ip-intro-seen", "1"); } catch (e) { /* storage unavailable */ }
+});
+intro.addEventListener("click", (e) => { if (e.target === intro) intro.close(); });  // a click on the backdrop
+$("intro-close").addEventListener("click", () => intro.close());
+$("about-btn").addEventListener("click", openIntro);
+let introSeen = false;
+try { introSeen = !!localStorage.getItem("ip-intro-seen"); } catch (e) { /* storage unavailable */ }
+if (!introSeen && !/^#game=/.test(location.hash)) openIntro();
+
+/* ---------- boot ---------- */
+async function boot() {
+  let data = JSON.parse($("ip-data").textContent || "null");
+  if (!data) {
+    S.live = true;
+    try {
+      data = await (await fetch("api/map")).json();
+      data.ideas = await (await fetch("api/ideas")).json();
+    } catch (e) { throw new Error(friendly(e)); }
+  }
+  S.data = data; S.n = data.meta.n;
+  const layout = (v, b, d) => {
+    const L = LAY[d], q = b64(b, Uint16Array), P = new Float32Array(S.n * 3);
+    L.c = L.c.map((_, k) => (v[k] + v[k + d]) / 2); L.k = Math.max(...L.c.map((_, k) => v[k + d] - v[k])) / 2;
+    for (let i = 0; i < S.n; i++) for (let k = 0; k < d; k++) P[i * 3 + k] = (q[i * d + k] - L.c[k]) / L.k;
+    L.P = P;
+  };
+  layout(data.meta.view, data.xyz, 3);
+  if (data.xy) layout(data.meta.view2, data.xy, 2); else $("dims").hidden = true;  // static pages from older builds
+  if (S.dim === 2 && !LAY[2].P) S.dim = 3;
+  WS = LAY[S.dim]; S.P = WS.P;
+  S.C = b64(data.cluster, Uint8Array); S.R = b64(data.rev, Uint8Array); S.appid = b64(data.appid, Uint32Array);
+  S.names = data.names; S.lower = data.names.map((s) => s.toLowerCase());
+  S.ideas = data.ideas || []; sortIdeas();
+  $("stat").textContent = `${S.n.toLocaleString()} Steam games · ${data.meta.model.split("/").pop()} · ${data.meta.dim}-d · ${data.meta.date}`;
+  $("mode").textContent = S.live ? "live" : "static"; $("mode").classList.toggle("live", S.live);
+  $("mode").title = S.live ? "Connected to the local IdeaPlotter server" : "Static copy: double-click run.bat to generate ideas";
+  palette(); initGL(); resize(); fit(); renderLedger(); dimUI();
+  const opened = /^#game=(\d+)$/.exec(location.hash);  // set when a game was just added to the map
+  if (opened) { history.replaceState(null, "", location.pathname); if (+opened[1] < S.n) flyTo(+opened[1]); }
+  document.fonts && document.fonts.ready.then(() => renderOverlay());  // labels are drawn with the display face
+}
+new ResizeObserver(() => { const first = !W; resize(); if (first && S.data) fit(); }).observe(plate);
+boot().catch((e) => { $("stat").textContent = "Could not load the map: " + e.message; });
+})();
+</script>

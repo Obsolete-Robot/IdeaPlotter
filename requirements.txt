@@ -1,0 +1,12 @@
+# Install torch first (see Quick start in README.md). For an NVIDIA GPU on Windows:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu126
+torch
+sentence-transformers>=5
+transformers
+numpy
+pandas
+pyarrow
+scikit-learn
+scipy
+umap-learn
+anthropic

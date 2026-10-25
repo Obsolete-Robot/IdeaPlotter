@@ -1,0 +1,12 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Crawled Steam data, embeddings and generated ideas
+# (get the prebuilt space with: python -m ideaplotter download; or build it: fetch / build)
+data/
+out/
+
+# API keys written by the installer
+.env
